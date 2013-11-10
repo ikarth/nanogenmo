@@ -29,8 +29,10 @@
 
 (defn strip-linebreaks [text]
   "Returns string with linebreaks stripped out."
-  (clojure.string/replace text "\r\n" " "))
-
+   (clojure.string/replace 
+     (clojure.string/replace text #"[\r\n]+" "_@_")
+     "_@_" " "))
+  
 ;(defn input-source-text-2 [source-text]
 ;  (get-sentences (slurp source-text)))
 
@@ -43,8 +45,9 @@
 
 (defn categorize-paragraph [source-text]
   "Returns a category based on the contents of the source-text: dialog, action, or exposition."
-  ;(clojure.string/
-  )
+  (cond
+    (re-find #"\"" source-text) :dialogue
+    :else :action))
 
 (defn input-source-text [source-text]
   "Takes cleaned source text and formats it into useful paragraphs."
@@ -52,8 +55,26 @@
                     (mark-paragraphs 
                       (slurp source-text)))))
 
-(input-source-text
-  "texts\\cleaned\\pnp_excerpt.txt")
+(defn categorize-text [paragraphs]
+  "Takes a vector of paragraphs and returns a categorized map of paragraphs."
+  (map #(hash-map :category (categorize-paragraph %) :text %)
+       paragraphs))
+
+(defn paragraph-to-sentences [paragraph]
+  "Takes paragraph-map-data and assocs the sentence breakdown."
+  (assoc paragraph :sentences (get-sentences (:text paragraph))))
+  ;(assoc paragraph (hash-map :sentences (get-sentences (:text paragraph)))))
+
+ (defn sentence-from-paragraphs [paragraphs]
+   "Given a collection of paragraphs, grab just the sentences."
+   (map #(:sentences %) paragraphs))
+   
+(sentence-from-paragraphs
+     (map paragraph-to-sentences 
+          (filter #(= (:category %) :action)
+                 (categorize-text
+                  (input-source-text
+                            "texts\\cleaned\\pnp_excerpt.txt")))));)
 
 
 ;(get-sentences (strip-linebreaks
