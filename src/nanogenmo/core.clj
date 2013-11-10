@@ -32,16 +32,12 @@
                (remove #(nil? (:tag %)) elements#)))))
 
 (fixed-chunk-filter fixed-noun-phrases #"^NP$")
+;;;
 
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
   (println "Hello, World!"))
-
-;(defn input-source-text [source-text]
-;  (with-open [rdr (reader source-text)]
-;    (doseq [line (line-seq rdr)]
-;      (println line))))
 
 (defn strip-italics [text]
   "Removes _underscored italics_ from the text. It'd be nice to find a way to include these, later."
@@ -53,9 +49,6 @@
      (clojure.string/replace text #"[\r\n]+" "_@_")
      "_@_" " "))
   
-;(defn input-source-text-2 [source-text]
-;  (get-sentences (slurp source-text)))
-
 (defn mark-paragraphs [source-text]
   (clojure.string/replace source-text #"\r\n\r\n" "¶"))
 
@@ -104,37 +97,15 @@
                    )))
          paragraphs))
 
-;(defn detect-exposition-in-sentence [sentence]
-;  (cond
-;    (re-find #"\b(She|she|He|he)\b" sentence) :exposition
-;    :else :action))
-  
-;(defn detect-exposition-in-paragraph [paragraph] 
-;  "Look through the sentences in the paragraph and sort out which ones have action and which ones are mostly expository.
-;Right now this is based on guessing via the presence of he/she, but a later refinement might want to look at the verb."
-;  (let [action-sentences (:action (:categorized paragraph))]
-;    (map #(detect-exposition-in-sentence %) action-sentences)
-;    ))
-  
 (defn sentences-from-paragraphs [paragraphs]
   "Given a collection of paragraphs, grab just the sentences."
   (mapcat #(:sentences %) paragraphs))
-
- ; Take the text file and sort it into paragraphs, break those paragraphs down into sentence types
- 
-;(defn categorize-into-paragraphs [source-text]
-;  (categorize-text
-;    (input-source-text-directly source-text)))
 
 (defn grab-sentences-of-type [paragraphs sentence-type]
   (sentences-from-paragraphs
          (map paragraph-to-sentences 
               (filter #(= (:category %) sentence-type)
                       paragraphs))))
-
-(defn first-categorization [source-text type-list]
-  (let [paragraphs (categorize-into-paragraphs source-text)]
-    (map #(grab-sentences-of-type paragraphs %) type-list)))
 
 (defn get-sentences-of-category [paragraphs category]
   (mapcat #(category (:categorized %)) paragraphs))
@@ -155,18 +126,12 @@
   "Takes a formatted action-sentence-function and runs it, returning a string that can be printed."
   )
 
-;(binding [*print-right-margin* nil]
-;  (pprint
-;    (get-actions (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
-
-
-
 (defn process-action [sentence]
-  (noun-phrases (chunker (pos-tag (tokenize sentence)))))
+  (fixed-noun-phrases (chunker (pos-tag (tokenize sentence)))))
 
 (defn test-action-processing []
   (map #(process-action %)
-       (get-actions (slurp "texts\\cleaned\\pnp_excerpt2.txt"))))
+       (get-actions (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
 
 (with-open [wrtr (writer "texts\\output\\test3.txt")]
   (write
@@ -176,18 +141,8 @@
 
 (pprint (test-action-processing))
 
-(pprint 
-  (noun-phrases 
-    (chunker 
-      (pos-tag 
-        (tokenize "And when the party entered the assembly room, it consisted of only five
-altogether.")))))
 
-
-    
-    
-    
-
+;; Old scratchspace...
 (comment
 (binding [*print-right-margin* nil]
   (pprint
@@ -197,35 +152,19 @@ altogether.")))))
            (categorize-text 
             (input-source-text-directly
               (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
-         :action))))
-
-           ;[:action :dialogue :starts-with-comma :exposition])))
- 
-   ;(input-source-text "texts\\cleaned\\pnp_excerpt.txt")
-  
-   ;(spit  "texts\\output\\test.txt"
-   ;(binding [*print-right-margin* nil]
-   ;(map #(pprint %)
-   ;(pprint
- 
+         :action)))
+)
+            
 (comment   
-(defn test-pnp-processing []
-  (with-open [wrtr (writer "texts\\output\\test2.txt")]
-    (write
-      ;(sentences-from-paragraphs
-        ;(map paragraph-to-sentences 
-             ;(filter #(= (:category %) :action)
-                     (categorize-text
-                       (input-source-text-from-file
+  (defn test-pnp-processing []
+    (with-open [wrtr (writer "texts\\output\\test2.txt")]
+      (write
+        ;(sentences-from-paragraphs
+          ;(map paragraph-to-sentences 
+               ;(filter #(= (:category %) :action)
+                       (categorize-text
+                         (input-source-text-from-file
                           "texts\\cleaned\\pnp_excerpt.txt"))
-      :pretty true
-      :stream wrtr))))
-;(test-pnp-processing)
- 
- 
-
- 
-
-;(get-sentences (strip-linebreaks
-;(get-paragraphs (strip-linebreaks (mark-paragraphs (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
-
+        :pretty true
+        :stream wrtr)))
+  (test-pnp-processing))
