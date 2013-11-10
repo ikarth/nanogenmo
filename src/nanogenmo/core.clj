@@ -1,10 +1,12 @@
 (ns nanogenmo.core
   (:require [clojure.pprint]
             [opennlp.nlp]
-            [opennlp.treebank])
+            [opennlp.treebank]
+            [opennlp.tools.filters])
   (:use [clojure.pprint]
         [opennlp.nlp]
-        [opennlp.treebank])
+        [opennlp.treebank]
+        [opennlp.tools.filters])
   (:gen-class))
 
 (use 'clojure.java.io)
@@ -15,7 +17,21 @@
 (def pos-tag (make-pos-tagger "models/en-pos-maxent.bin"))
 (def name-find (make-name-finder "models/namefind/en-ner-person.bin"))
 (def chunker (make-treebank-chunker "models/en-chunker.bin"))
+(def parser (make-treebank-parser "models/en-parser-chunking.bin"))
 
+;;; Workaround until the bug gets fixed...
+(defmacro fixed-chunk-filter
+  "Declare a filter for treebank-chunked lists with the given name and regex."
+  [n r]
+  (let [docstring (str "Given a list of treebank-chunked elements, "
+                       "return only the " n " in a list.")]
+    `(defn ~n
+       ~docstring
+       [elements#]
+       (filter (fn [t#] (re-find ~r (:tag t#))) 
+               (remove #(nil? (:tag %)) elements#)))))
+
+(fixed-chunk-filter fixed-noun-phrases #"^NP$")
 
 (defn -main
   "I don't do a whole lot ... yet."
@@ -26,6 +42,10 @@
 ;  (with-open [rdr (reader source-text)]
 ;    (doseq [line (line-seq rdr)]
 ;      (println line))))
+
+(defn strip-italics [text]
+  "Removes _underscored italics_ from the text. It'd be nice to find a way to include these, later."
+  (clojure.string/replace text "_" ""))
 
 (defn strip-linebreaks [text]
   "Returns string with linebreaks stripped out."
@@ -53,9 +73,9 @@
 
 (defn input-source-text-directly [source-text]
   "Takes cleaned source text and formats it into useful paragraphs."
-  (get-paragraphs (strip-linebreaks 
+  (get-paragraphs (strip-italics (strip-linebreaks 
                     (mark-paragraphs 
-                       source-text))))
+                       source-text)))))
 
 (defn input-source-text-from-file [filename]
   "Takes cleaned source text and formats it into useful paragraphs."
@@ -127,20 +147,43 @@
               source-text)))
          :action))
 
+(defn create-action [sentence]
+  "Takes an action sentence and converts it to a valid action-sentence-function that can be called by the characters."
+  )
 
-(binding [*print-right-margin* nil]
-  (pprint
-    (get-actions (slurp "texts\\cleaned\\pnp_excerpt.txt"))
+(defn display-action [action]
+  "Takes a formatted action-sentence-function and runs it, returning a string that can be printed."
+  )
 
-    
-    
+;(binding [*print-right-margin* nil]
+;  (pprint
+;    (get-actions (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
+
+
+
+(defn process-action [sentence]
+  (noun-phrases (chunker (pos-tag (tokenize sentence)))))
+
+(defn test-action-processing []
+  (map #(process-action %)
+       (get-actions (slurp "texts\\cleaned\\pnp_excerpt2.txt"))))
+
 (with-open [wrtr (writer "texts\\output\\test3.txt")]
   (write
-    (get-actions (slurp "texts\\cleaned\\pnp_excerpt.txt"))
+    (test-action-processing)
     :pretty true
-    :stream wrtr)))
-    
-    
+    :stream wrtr))
+
+(pprint (test-action-processing))
+
+(pprint 
+  (noun-phrases 
+    (chunker 
+      (pos-tag 
+        (tokenize "And when the party entered the assembly room, it consisted of only five
+altogether.")))))
+
+
     
     
     
@@ -165,7 +208,7 @@
    ;(map #(pprint %)
    ;(pprint
  
-   
+(comment   
 (defn test-pnp-processing []
   (with-open [wrtr (writer "texts\\output\\test2.txt")]
     (write
@@ -176,7 +219,7 @@
                        (input-source-text-from-file
                           "texts\\cleaned\\pnp_excerpt.txt"))
       :pretty true
-      :stream wrtr)))
+      :stream wrtr))))
 ;(test-pnp-processing)
  
  
