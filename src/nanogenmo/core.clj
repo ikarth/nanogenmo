@@ -126,8 +126,46 @@
   "Takes a formatted action-sentence-function and runs it, returning a string that can be printed."
   )
 
+(defn find-in-phrase [phrase regex]
+  (some #(re-find regex %) (:phrase phrase)))
+
+(defn variablize-phrase [phrase]
+  (if (= (:tag phrase) "NP")
+    (cond
+      (find-in-phrase phrase #"\b(She|she)\b" ) 
+      (assoc phrase :phrase ["[ACTOR-NAME-FEMALE]"])
+      (find-in-phrase phrase #"\b(He|he)\b" ) 
+      (assoc phrase :phrase ["[ACTOR-NAME-MALE]"])
+      (find-in-phrase phrase
+                      #"(Elizabeth|Lizzy|Lydia|Lady|Lucas|Kitty|Catherine|Miss|Maria|Mary|Jane|Mrs.|Miss)") 
+      (assoc phrase :phrase ["[ACTOR-NAME-FEMALE]"])
+      (find-in-phrase phrase
+                      #"(Mr.|Bingley|Darcy|Hurst|William)") 
+      (assoc phrase :phrase ["[ACTOR-NAME-MALE]"])
+      
+      :else phrase)
+    phrase))
+  
+
+(defn substitute-noun-phrases [chunked-sentence]
+  (map #(variablize-phrase %) chunked-sentence))
+
+(defn dechunk [chunked-sentences unchunked-sentences]
+  "Return to the unchunked sentence, with the subsitutions from the chunked sentence."
+  (mapcat #(:phrase %) chunked-sentences))
+
 (defn process-action [sentence]
-  (fixed-noun-phrases (chunker (pos-tag (tokenize sentence)))))
+  (let [tokenized-sentence (tokenize sentence)
+        chunked-sentence (substitute-noun-phrases (chunker (pos-tag tokenized-sentence)))
+        unchunked-sentence (dechunk chunked-sentence tokenized-sentence)]
+    (str (detokenize unchunked-sentence) "."))) ; hack to restore periods...
+
+  ;(name-find (tokenize sentence)))
+  ;(detokenize (dechunk 
+  ;(substitute-noun-phrases 
+  ;(chunker 
+  ; (pos-tag (tokenize sentence)))));))
+
 
 (defn test-action-processing []
   (map #(process-action %)
@@ -140,6 +178,18 @@
     :stream wrtr))
 
 (pprint (test-action-processing))
+
+
+
+
+(defn example-action [actor]
+  (apply str 
+         (detokenize
+         (tokenize "An example sentence about [ACTOR-NAME]."))
+         ))
+  
+(pprint (example-action {:name "Me"}))
+  
 
 
 ;; Old scratchspace...
