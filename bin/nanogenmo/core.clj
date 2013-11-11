@@ -50,11 +50,18 @@
      "_@_" " "))
   
 (defn mark-paragraphs [source-text]
-  (clojure.string/replace source-text #"\r\n\r\n" "¶"))
+  (clojure.string/replace source-text #"\r\n\r\n" "¶X¶X"))
+
+(defn break-on-pilcrow [source-text]
+  (clojure.string/replace 
+      source-text 
+      #"¶" "\r\n\r\n";(str \newline \newline)
+      ;(clojure.string/re-quote-replacement \newline)
+      ))
 
 (defn get-paragraphs [source-text]
   "Returns source-texts broken into a list of paragraphs."
-  (clojure.string/split source-text #"¶"))
+  (clojure.string/split source-text #"X¶X"))
 
 (defn categorize-paragraph [source-text]
   "Returns a category based on the contents of the source-text: dialog, action, or exposition."
@@ -97,6 +104,19 @@
                    )))
          paragraphs))
 
+(comment
+(defn mark-last-sentence [paragraph]
+  (if (not (nil? paragraph))
+    (let [sentences (:action (:categorized paragraph))]
+      (if (not (nil? sentences))
+        (assoc-in paragraph [:categorized :action] 
+                  (assoc sentences 
+                         (- (count sentences) 1) 
+                         (str (last sentences) "-----------¶")))
+        paragraph))
+    paragraph))
+  )
+
 (defn sentences-from-paragraphs [paragraphs]
   "Given a collection of paragraphs, grab just the sentences."
   (mapcat #(:sentences %) paragraphs))
@@ -112,11 +132,11 @@
 
 (defn get-actions [source-text]
   (get-sentences-of-category
-         (paragraph-to-typed-sentences
-           (categorize-text 
-            (input-source-text-directly
-              source-text)))
-         :action))
+    (paragraph-to-typed-sentences
+        (categorize-text 
+          (input-source-text-directly
+            source-text)))
+    :action))
 
 (defn create-action [sentence]
   "Takes an action sentence and converts it to a valid action-sentence-function that can be called by the characters."
@@ -146,7 +166,6 @@
       :else phrase)
     phrase))
   
-
 (defn substitute-noun-phrases [chunked-sentence]
   (map #(variablize-phrase %) chunked-sentence))
 
@@ -157,8 +176,10 @@
 (defn process-action [sentence]
   (let [tokenized-sentence (tokenize sentence)
         chunked-sentence  (chunker (pos-tag tokenized-sentence))
-        unchunked-sentence (dechunk chunked-sentence tokenized-sentence)]
-    (str (detokenize unchunked-sentence) "."))) ; hack to restore periods...
+        unchunked-sentence tokenized-sentence]
+    ;(str (detokenize unchunked-sentence) ".") ; hack to restore periods...
+    (detokenize unchunked-sentence)
+    ))
 
   ;(name-find (tokenize sentence)))
   ;(detokenize (dechunk 
@@ -171,16 +192,19 @@
   
   
 (defn test-action-processing []
-  (map #(process-action %)
-       (get-actions (slurp "texts\\cleaned\\pg42671.txt"))))
+  (map break-on-pilcrow
+      (get-actions (slurp "texts\\cleaned\\pg42671.txt"))))
 
-(with-open [wrtr (writer "texts\\output\\test.txt")]
-  (write
-    (test-action-processing)
-    :pretty true
-    :stream wrtr))
 
-(pprint (test-action-processing))
+(spit "texts\\output\\test.txt" (apply str (interpose " " (test-action-processing))))
+
+;(with-open [wrtr (writer "texts\\output\\test.txt")]
+;  (write
+;    (apply str (interpose " " (test-action-processing)))
+;    :pretty false
+;    :stream wrtr))
+
+;(pprint (test-action-processing))
 
 (defn create-actor [name gender]
   {:name name :gender gender})
@@ -194,7 +218,7 @@
          (tokenize "An example sentence about [ACTOR-NAME]."))
          ))
   
-(pprint (example-action {:name "Me"}))
+;(pprint (example-action {:name "Me"}))
   
 
 
