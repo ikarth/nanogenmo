@@ -156,7 +156,7 @@
 
 (defn process-action [sentence]
   (let [tokenized-sentence (tokenize sentence)
-        chunked-sentence (substitute-noun-phrases (chunker (pos-tag tokenized-sentence)))
+        chunked-sentence  (chunker (pos-tag tokenized-sentence))
         unchunked-sentence (dechunk chunked-sentence tokenized-sentence)]
     (str (detokenize unchunked-sentence) "."))) ; hack to restore periods...
 
@@ -166,12 +166,15 @@
   ;(chunker 
   ; (pos-tag (tokenize sentence)))));))
 
-
+(defn example-action [character-one character-two]
+  {:text (str " " " ") :characters [character-one character-two]})
+  
+  
 (defn test-action-processing []
   (map #(process-action %)
-       (get-actions (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
+       (get-actions (slurp "texts\\cleaned\\pg42671.txt"))))
 
-(with-open [wrtr (writer "texts\\output\\test3.txt")]
+(with-open [wrtr (writer "texts\\output\\test.txt")]
   (write
     (test-action-processing)
     :pretty true
@@ -179,8 +182,11 @@
 
 (pprint (test-action-processing))
 
+(defn create-actor [name gender]
+  {:name name :gender gender})
 
-
+(create-actor "Mr. Darcy" :male)
+(create-actor "Elizabeth" :female)
 
 (defn example-action [actor]
   (apply str 
