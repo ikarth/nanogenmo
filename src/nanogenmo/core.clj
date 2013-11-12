@@ -39,6 +39,14 @@
   [& args]
   (println "Hello, World!"))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Input
+;;
+;; Bring the text in from a file and put it into a useful format.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defn strip-italics [text]
   "Removes _underscored italics_ from the text. It'd be nice to find a way to include these, later."
   (clojure.string/replace text "_" ""))
@@ -50,25 +58,24 @@
      "_@_" " "))
   
 (defn mark-paragraphs [source-text]
-  (clojure.string/replace source-text #"\r\n\r\n" "¶X¶X"))
+  "Find the linebreaks and mark their position for later splitting. May need updating for non-Windows files."
+  (clojure.string/replace source-text #"\r\n\r\n" "¶"))
 
 (defn break-on-pilcrow [source-text]
+  "Find paragraph markers and reinsert the linebreaks."
   (clojure.string/replace 
       source-text 
-      #"¶" "\r\n\r\n";(str \newline \newline)
-      ;(clojure.string/re-quote-replacement \newline)
-      ))
+      #"¶" "\r\n\r\n"))
 
 (defn get-paragraphs [source-text]
   "Returns source-texts broken into a list of paragraphs."
-  (clojure.string/split source-text #"X¶X"))
+  (clojure.string/split source-text #"¶"))
 
 (defn categorize-paragraph [source-text]
   "Returns a category based on the contents of the source-text: dialog, action, or exposition."
   (cond
     (re-find #"\"" source-text) :dialogue
     (re-find #",$" source-text) :ends-with-comma ;only last sentence is dialogue
-    ;(re-find #"\b(She|she|He|he)\b" source-text) :action
     :else :action))
 
 (defn input-source-text-directly [source-text]
@@ -90,9 +97,14 @@
 (defn paragraph-to-sentences [paragraph]
   "Takes paragraph-map-data and assocs the sentence breakdown."
   (assoc paragraph :sentences (get-sentences (:text paragraph))))
-  ;(assoc paragraph (hash-map :sentences (get-sentences (:text paragraph)))))
+
+;; A better way to handle the dialog detection: go through the sentences, tracking the quotes 
+;; as they open and close the quotations. "This is dialog," he said. This is action. "Even 
+;; though they are in the same paragraph."
+;; In the long run, paragraph-level analysis may be less useful than sentence-level filtering.
 
 (defn paragraph-to-typed-sentences [paragraphs]
+  "Takes a paragraph's text and adds categorized sentence breakdowns, to handle the paragraphs that mix action and dialog."
   (map #(assoc % :categorized 
                (let [sentences (get-sentences (:text %))
                      category (:category %)]
@@ -100,43 +112,86 @@
                    (= category :dialogue) {:dialogue sentences}
                    (= category :action) {:action sentences}
                    (= category :ends-with-comma) {:action (butlast sentences) 
-                                                  :dialogue (last sentences)}
-                   )))
+                                                  :dialogue (last sentences)})))
          paragraphs))
-
-(comment
-(defn mark-last-sentence [paragraph]
-  (if (not (nil? paragraph))
-    (let [sentences (:action (:categorized paragraph))]
-      (if (not (nil? sentences))
-        (assoc-in paragraph [:categorized :action] 
-                  (assoc sentences 
-                         (- (count sentences) 1) 
-                         (str (last sentences) "-----------¶")))
-        paragraph))
-    paragraph))
-  )
 
 (defn sentences-from-paragraphs [paragraphs]
   "Given a collection of paragraphs, grab just the sentences."
   (mapcat #(:sentences %) paragraphs))
 
-(defn grab-sentences-of-type [paragraphs sentence-type]
-  (sentences-from-paragraphs
-         (map paragraph-to-sentences 
-              (filter #(= (:category %) sentence-type)
-                      paragraphs))))
+;(defn grab-sentences-of-type [paragraphs sentence-type]
+;  (sentences-from-paragraphs
+;         (map paragraph-to-sentences 
+;              (filter #(= (:category %) sentence-type)
+;                      paragraphs))))
+
+(defn just-categorized-sentences [paragraph category]
+  (category (:categorized paragraph)))
+
+(defn append-pilcrow [sentences]
+  "Given a collection of sentences, add a marker to the end of the last one."
+  (if (> (count sentences) 0)
+    (conj (vec (str (last sentences) "¶")) (butlast sentences))
+    sentences))
 
 (defn get-sentences-of-category [paragraphs category]
-  (mapcat #(category (:categorized %)) paragraphs))
+  (mapcat
+    #(append-pilcrow (just-categorized-sentences % category))
+    paragraphs))
+  
+  ;(mapcat #(category (:categorized %)) paragraphs))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Actions
+;;
+;; An action is a function based on a single sentence (or other complete lexical module) 
+;; pulled from the source file.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn get-actions [source-text]
+  "Take a source text, convert it to paragraphs, and finally output individual sentences as actions."
   (get-sentences-of-category
     (paragraph-to-typed-sentences
         (categorize-text 
           (input-source-text-directly
             source-text)))
     :action))
+
+(defn dechunk [chunked-sentences unchunked-sentences]
+  "Return to the unchunked sentence, with the subsitutions from the chunked sentence."
+  (mapcat #(:phrase %) chunked-sentences))
+
+(defn process-action [sentence]
+  (let [tokenized-sentence (tokenize sentence)
+        chunked-sentence  (chunker (pos-tag tokenized-sentence))
+        unchunked-sentence tokenized-sentence]
+    ;(str (detokenize unchunked-sentence) ".") ; hack to restore periods...
+    (detokenize unchunked-sentence)
+    ))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 (defn create-action [sentence]
   "Takes an action sentence and converts it to a valid action-sentence-function that can be called by the characters."
@@ -169,32 +224,12 @@
 (defn substitute-noun-phrases [chunked-sentence]
   (map #(variablize-phrase %) chunked-sentence))
 
-(defn dechunk [chunked-sentences unchunked-sentences]
-  "Return to the unchunked sentence, with the subsitutions from the chunked sentence."
-  (mapcat #(:phrase %) chunked-sentences))
-
-(defn process-action [sentence]
-  (let [tokenized-sentence (tokenize sentence)
-        chunked-sentence  (chunker (pos-tag tokenized-sentence))
-        unchunked-sentence tokenized-sentence]
-    ;(str (detokenize unchunked-sentence) ".") ; hack to restore periods...
-    (detokenize unchunked-sentence)
-    ))
-
-  ;(name-find (tokenize sentence)))
-  ;(detokenize (dechunk 
-  ;(substitute-noun-phrases 
-  ;(chunker 
-  ; (pos-tag (tokenize sentence)))));))
-
 (defn example-action [character-one character-two]
   {:text (str " " " ") :characters [character-one character-two]})
-  
-  
+ 
 (defn test-action-processing []
   (map break-on-pilcrow
       (get-actions (slurp "texts\\cleaned\\pg42671.txt"))))
-
 
 (spit "texts\\output\\test.txt" (apply str (interpose " " (test-action-processing))))
 
