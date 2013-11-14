@@ -67,6 +67,12 @@
       source-text 
       #"¶" "\r\n\r\n"))
 
+(defn append-space [source-text]
+  "Add a space to the end of the string"
+  (if-not (nil? (re-find #"¶" source-text))
+    (str source-text " ")
+    source-text))
+
 (defn get-paragraphs [source-text]
   "Returns source-texts broken into a list of paragraphs."
   (clojure.string/split source-text #"¶"))
@@ -130,18 +136,22 @@
 
 (defn append-pilcrow [sentences]
   "Given a collection of sentences, add a marker to the end of the last one."
-  (if (> (count sentences) 0)
-    (conj (vec (str (last sentences) "¶")) (butlast sentences))
+  (if (not (nil? sentences))
+    (if (> (count sentences) 0)
+      (vec (conj sentences (str "¶")))
+      sentences)
     sentences))
 
 (defn get-sentences-of-category [paragraphs category]
   (mapcat
-    #(append-pilcrow (just-categorized-sentences % category))
+    ;#(append-pilcrow 
+     #(just-categorized-sentences % category);)
     paragraphs))
   
   ;(mapcat #(category (:categorized %)) paragraphs))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;; Actions
 ;;
@@ -150,14 +160,20 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defstruct action :text :tokens)
+
 (defn get-actions [source-text]
   "Take a source text, convert it to paragraphs, and finally output individual sentences as actions."
-  (get-sentences-of-category
-    (paragraph-to-typed-sentences
-        (categorize-text 
-          (input-source-text-directly
-            source-text)))
-    :action))
+  (map #(struct action %)
+       (get-sentences-of-category
+         (paragraph-to-typed-sentences
+           (categorize-text 
+             (input-source-text-directly
+               source-text)))
+         :action)))
+
+(defn tokenize-action [act]
+  (assoc act :tokens (tokenize (:text act))))
 
 (defn dechunk [chunked-sentences unchunked-sentences]
   "Return to the unchunked sentence, with the subsitutions from the chunked sentence."
@@ -171,6 +187,16 @@
     (detokenize unchunked-sentence)
     ))
 
+  
+
+
+
+;; testing...
+;(spit "texts\\output\\test.txt" 
+(pprint
+  (map tokenize-action
+      (get-actions 
+        (slurp "texts\\cleaned\\pg42671_clean.txt"))))
 
 
 
@@ -178,6 +204,39 @@
 
 
 
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Side Effects
+;;
+;; Output that happened to happen along the way to trying to get something else
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn output-action-edition [source destination]
+  (spit destination
+        (apply str 
+               (map append-space
+                    (map break-on-pilcrow
+                         (get-sentences-of-category
+                           (append-pilcrow
+                             (paragraph-to-typed-sentences
+                               (categorize-text 
+                                 (input-source-text-directly
+                                   (slurp source)))))
+                             :action))))))
+                           
+                           
+
+(defn pnp-action-edition []
+  (output-action-edition "texts\\cleaned\\pg42671.txt" "texts\\output\\pnp_action_edition.txt"))
+
+;(comment
+  (pnp-action-edition)
+  ;)
 
 
 
@@ -228,10 +287,11 @@
   {:text (str " " " ") :characters [character-one character-two]})
  
 (defn test-action-processing []
-  (map break-on-pilcrow
-      (get-actions (slurp "texts\\cleaned\\pg42671.txt"))))
+  (map append-space
+       (map break-on-pilcrow
+           (get-actions (slurp "texts\\cleaned\\pg42671.txt")))))
 
-(spit "texts\\output\\test.txt" (apply str (interpose " " (test-action-processing))))
+;(spit "texts\\output\\test.txt" (apply str (interpose "" (test-action-processing))))
 
 ;(with-open [wrtr (writer "texts\\output\\test.txt")]
 ;  (write
