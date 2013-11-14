@@ -59,7 +59,7 @@
   
 (defn mark-paragraphs [source-text]
   "Find the linebreaks and mark their position for later splitting. May need updating for non-Windows files."
-  (clojure.string/replace source-text #"\r\n\r\n" "¶"))
+  (clojure.string/replace source-text #"\r\n\r\n" "¶X¶X"))
 
 (defn break-on-pilcrow [source-text]
   "Find paragraph markers and reinsert the linebreaks."
@@ -75,7 +75,7 @@
 
 (defn get-paragraphs [source-text]
   "Returns source-texts broken into a list of paragraphs."
-  (clojure.string/split source-text #"¶"))
+  (clojure.string/split source-text #"X¶X"))
 
 (defn categorize-paragraph [source-text]
   "Returns a category based on the contents of the source-text: dialog, action, or exposition."
@@ -225,18 +225,19 @@
                            (append-pilcrow
                              (paragraph-to-typed-sentences
                                (categorize-text 
-                                 (input-source-text-directly
-                                   (slurp source)))))
-                             :action))))))
+                                 (clojure.string/split 
+                                   (strip-italics 
+                                     (strip-linebreaks 
+                                       (clojure.string/replace 
+                                         (slurp source) #"\r\n\r\n" "¶X¶X")))
+                                   #"X¶X"))))
+                           :action))))))
                            
-                           
-
 (defn pnp-action-edition []
   (output-action-edition "texts\\cleaned\\pg42671.txt" "texts\\output\\pnp_action_edition.txt"))
 
-;(comment
-  (pnp-action-edition)
-  ;)
+(comment
+ (pnp-action-edition))
 
 
 
