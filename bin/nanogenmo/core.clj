@@ -40,11 +40,11 @@
   (println "Hello, World!"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;; Input
-;;
-;; Bring the text in from a file and put it into a useful format.
-;;
+;;;
+;;; Input
+;;;
+;;; Bring the text in from a file and put it into a useful format.
+;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn strip-italics [text]
@@ -59,7 +59,7 @@
   
 (defn mark-paragraphs [source-text]
   "Find the linebreaks and mark their position for later splitting. May need updating for non-Windows files."
-  (clojure.string/replace source-text #"\r\n\r\n" "¶X¶X"))
+  (clojure.string/replace source-text #"\r\n\r\n" "¶"))
 
 (defn break-on-pilcrow [source-text]
   "Find paragraph markers and reinsert the linebreaks."
@@ -75,7 +75,7 @@
 
 (defn get-paragraphs [source-text]
   "Returns source-texts broken into a list of paragraphs."
-  (clojure.string/split source-text #"X¶X"))
+  (clojure.string/split source-text #"¶"))
 
 (defn categorize-paragraph [source-text]
   "Returns a category based on the contents of the source-text: dialog, action, or exposition."
@@ -152,12 +152,12 @@
 
   
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;; Actions
-;;
-;; An action is a function based on a single sentence (or other complete lexical module) 
-;; pulled from the source file.
-;;
+;;;
+;;; Actions
+;;;
+;;; An action is a function based on a single sentence (or other complete lexical module) 
+;;; pulled from the source file.
+;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defstruct action :text :tokens)
@@ -171,6 +171,14 @@
              (input-source-text-directly
                source-text)))
          :action)))
+
+(defn get-sentences-from-text [source-text]
+  (get-sentences-of-category
+         (paragraph-to-typed-sentences
+           (categorize-text 
+             (input-source-text-directly
+               source-text)))
+         :action))
 
 (defn tokenize-action [act]
   (assoc act :tokens (tokenize (:text act))))
@@ -187,33 +195,59 @@
     (detokenize unchunked-sentence)
     ))
 
-  
-
-
-
+ 
 ;; testing...
+(comment
 ;(spit "texts\\output\\test.txt" 
 (pprint
   (map tokenize-action
       (get-actions 
         (slurp "texts\\cleaned\\pg42671_clean.txt"))))
+)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;; Training
+;;;
+;;; Parsing files for training and then running the training tools on them.
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; Training types:
+;; Sentences: Output one sentence per line.
+;; Tokenizer: One sentence per line, non-whitespace splits marked with <SPLIT>
+;; Parts-of-speech: requires every part of speech be tagged, on sentence per line
+;; Treebank chunker: http://www.cnts.ua.ac.be/conll2000/chunking/
+;; Named entity: one tokenized sentence per line, names marked.
+;; Document categorizer: Sentiment word
 
+(defn create-sentence-training-file [source destination]
+  "Load a document, output as one sentence per line."
+  (spit destination
+        (apply str (mapcat #(apply str % "\n")
+               (get-sentences-from-text 
+                    (slurp source))))))
 
+(defn create-name-training-file [source destination]
+  "Load a document, tokenize it, output as one sentence per line."
+  (spit destination
+        (apply str (mapcat #(apply str (apply str (interpose " " %)) "\n")
+               (map 
+                 tokenize 
+                 (get-sentences-from-text 
+                    (slurp source)))))))
 
-
-
-
+(create-name-training-file "texts\\cleaned\\pg42671_clean.txt" "texts\\training\\pg42671name.train")
+(create-sentence-training-file "texts\\cleaned\\pg42671_clean.txt" "texts\\training\\pg42671token.train")
 
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-;; Side Effects
-;;
-;; Output that happened to happen along the way to trying to get something else
-;;
+;;;
+;;; Side Effects
+;;;
+;;; Output that happened to happen along the way to trying to get something else
+;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn output-action-edition [source destination]
