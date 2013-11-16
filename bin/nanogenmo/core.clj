@@ -2,7 +2,8 @@
   (:require [clojure.pprint]
             [opennlp.nlp]
             [opennlp.treebank]
-            [opennlp.tools.filters])
+            [opennlp.tools.filters]
+            [opennlp.tools.train])
   (:use [clojure.pprint]
         [opennlp.nlp]
         [opennlp.treebank]
@@ -11,8 +12,10 @@
 
 (use 'clojure.java.io)
 
+(pprint "Running...")
+
 (def get-sentences (make-sentence-detector "models/en-sent.bin"))
-(def tokenize (make-tokenizer "models/en-token.bin"))
+(def tokenize (make-tokenizer "models/en-gutenberg-base-token.bin"))
 (def detokenize (make-detokenizer "models/english-detokenizer.xml"))
 (def pos-tag (make-pos-tagger "models/en-pos-maxent.bin"))
 (def name-find (make-name-finder "models/namefind/en-ner-person.bin"))
@@ -31,7 +34,7 @@
        (filter (fn [t#] (re-find ~r (:tag t#))) 
                (remove #(nil? (:tag %)) elements#)))))
 
-(fixed-chunk-filter fixed-noun-phrases #"^NP$")
+(chunk-filter fixed-noun-phrases #"^NP$")
 ;;;
 
 (defn -main
@@ -47,25 +50,61 @@
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(def ^:dynamic *windows-linebreaks* true)
+
 (defn strip-italics [text]
   "Removes _underscored italics_ from the text. It'd be nice to find a way to include these, later."
   (clojure.string/replace text "_" ""))
 
-(defn strip-linebreaks [text]
+(defn strip-linebreaks-windows [text]
   "Returns string with linebreaks stripped out."
    (clojure.string/replace 
      (clojure.string/replace text #"[\r\n]+" "_@_")
      "_@_" " "))
-  
-(defn mark-paragraphs [source-text]
+
+(defn strip-linebreaks-unix [text]
+  "Returns string with linebreaks stripped out."
+   (clojure.string/replace 
+     (clojure.string/replace text #"[\n]+" "_@_")
+     "_@_" " "))
+
+(defn strip-linebreaks [text]
+  "Returns string with linebreaks stripped out."
+  (if *windows-linebreaks*
+    (strip-linebreaks-windows text)
+    (strip-linebreaks-unix text)))
+
+(defn mark-paragraphs-windows [source-text]
   "Find the linebreaks and mark their position for later splitting. May need updating for non-Windows files."
   (clojure.string/replace source-text #"\r\n\r\n" "¶"))
 
-(defn break-on-pilcrow [source-text]
+(defn mark-paragraphs-unix [source-text]
+  "Find the linebreaks and mark their position for later splitting. May need updating for non-Windows files."
+  (clojure.string/replace source-text #"\n\n" "¶"))
+
+(defn mark-paragraphs [text]
+  "Find the linebreaks and mark their position for later splitting."
+  (if *windows-linebreaks*
+    (mark-paragraphs-windows text)
+    (mark-paragraphs-unix text)))
+
+(defn break-on-pilcrow-windows [source-text]
   "Find paragraph markers and reinsert the linebreaks."
   (clojure.string/replace 
       source-text 
       #"¶" "\r\n\r\n"))
+
+(defn break-on-pilcrow-unix [source-text]
+  "Find paragraph markers and reinsert the linebreaks."
+  (clojure.string/replace 
+      source-text 
+      #"¶" "\n\n"))
+
+(defn break-on-pilcrow [text]
+  "Find paragraph markers and reinsert the linebreaks."
+  (if *windows-linebreaks*
+    (break-on-pilcrow-windows text)
+    (break-on-pilcrow-unix text)))
 
 (defn append-space [source-text]
   "Add a space to the end of the string"
@@ -172,6 +211,11 @@
                source-text)))
          :action)))
 
+(defn just-get-sentences [source-text]
+  (map #(clojure.string/replace % "`" "'")
+       (input-source-text-directly
+         source-text)))
+
 (defn get-sentences-from-text [source-text]
   (get-sentences-of-category
          (paragraph-to-typed-sentences
@@ -221,26 +265,154 @@
 ;; Named entity: one tokenized sentence per line, names marked.
 ;; Document categorizer: Sentiment word
 
+(defn brute-force-is-name? [token]
+  "Returns true if the token is a name."
+  (cond
+    (re-find #"^(Countess|Lady|Mrs.|Mrs|Miss)$" token) true
+    (re-find #"^(Captain|Colonel|Lord|Sir|Mr.|Mr)$" token) true
+    (re-find #"^(Bennets|Lucases|Harvilles|Gardiners|Collinses)$" token) true
+    (re-find #"^(Elizabeth|Catherine|Charlotte|Caroline|Georgina|William|Charles|Kitty|Walter|Lizzy|Lydia|Maria|Jane|Anne|Harriet|Mary|Pen)$" token) true
+    (re-find #"^(Wentworth|Harville|Benwick|Bennet|Bingley|Lucas|Hurst|Smith|Darcy|Gardiner|Wickham|Collins|Fitzwilliam|de|Bourgh|Elliot|Russell|Shepherd|Clay|Long|Metcalfe|Nicholls|Phillips|Pope|Pratt|Reynolds|Robinson|Stone|Watson|Webbs|Younge|Jenkinson|Jones|King|Long|Goulding|Grantley|Haggerston|Harrington|Annesley|Chamberlayne|Dawson|Denny|Forster|Croft)$" token) true
+    :else false))
+;her Ladyship, the Archbishop, the Secretary, the Superior, Mother Superior, 
+;Places: Rosings, London, Pemberley, Hertfordshire, Gracechurch-street, Brighton, Meryton, Derbyshire, Rosing's Park, Lambton, Hunsford Parsonage, Netherfield, 
+;Punctuation: !-- -- ;-- .--
+
+(defn mark-token [predicate? tokens]
+  (mapcat #(if (predicate? %)
+             ["<START>" % "<END>"]
+             [%])
+          tokens))
+
+;(defn mark-string [item]
+;  (mapcat #(cond
+;             () 
+;             :else item
+;             )))
+
+; , -> <SPLIT>,
+; ; -> <SPLIT>;
+; : -> <SPLIT>:
+; -- -> <SPLIT>--<SPLIT>
+; ' "' -> "<SPLIT>
+; '" ' -> <SPLIT>"
+; 
+
+;; tokenize with existing model
+;; compare against untokenized string
+;; mark splits where they don't match
+
+;(defn find-mismatches [a-string t-string]
+;  "Take two strings. Find the point where they don't match. Mark it. Return string of equal length to t-string by padding a-string with split markers."
+; )
+
+;(defn mark-split-diff [a-string]
+;  (let [t-string (apply str (tokenize a-string))
+;        ]
+;    
+;    ))
+
+;(defn mark-token-splits [string]
+; (-> 
+;   #(clojure.string/replace % "," "<SPLIT>,")
+;   #(clojure.string/replace % ";" "<SPLIT>;")
+;   #(clojure.string/replace % ":" "<SPLIT>:")
+;   #(clojure.string/replace % "--" "<SPLIT>--<SPLIT>")
+;   #(clojure.string/replace % " \"" "\"<SPLIT>")
+;   #(clojure.string/replace % "\" " "<SPLIT>\"")
+;   ))
+
+;; Take two strings
+;; walk through the longer (t-string) checking for matches
+;; if matched, consume and move on to the next one
+;; if not matched, output marker instead, and don't consume a-string
+ 
+(defn mark-diffs [string]
+  (apply str (loop [t-str (clojure.string/join 
+                            " " 
+                            (tokenize 
+                              (clojure.string/replace 
+                                string "--" " -- ")))                             
+                    a-str string 
+                    c-str []]
+               (if (empty? t-str)
+                 c-str
+                 (let [a1 (first a-str)
+                       t1 (first t-str)]
+                   (if (not (= a1 t1))
+                     (if (= t1 \space)
+                       (recur (rest t-str) 
+                             a-str 
+                             (conj c-str "✗"))
+                       (recur (rest t-str) 
+                             (rest (rest a-str)) 
+                             (conj c-str t1)))
+                     (recur (rest t-str) 
+                           (rest a-str) 
+                           (conj c-str t1))))))))
+ 
+(defn create-token-training-file [source destination]
+  "Load a document, output as one sentence per line."
+  (spit destination
+        (apply str (mapcat #(apply str % "\n")
+                           (map #(clojure.string/replace % "✗" "<SPLIT>")
+                                (map #(mark-diffs %)
+                                     (just-get-sentences 
+                                       source)))))))
+
 (defn create-sentence-training-file [source destination]
   "Load a document, output as one sentence per line."
   (spit destination
         (apply str (mapcat #(apply str % "\n")
-               (get-sentences-from-text 
-                    (slurp source))))))
+               (just-get-sentences 
+                    source)))))
 
 (defn create-name-training-file [source destination]
   "Load a document, tokenize it, output as one sentence per line."
   (spit destination
-        (apply str (mapcat #(apply str (apply str (interpose " " %)) "\n")
-               (map 
-                 tokenize 
-                 (get-sentences-from-text 
-                    (slurp source)))))))
+        (apply str 
+               (mapcat #(apply str (apply str (interpose " " %)) "\n")
+                       (map #(mark-token brute-force-is-name? %)
+                            (map 
+                              tokenize 
+                              (just-get-sentences 
+                                     source)))))))
 
-(create-name-training-file "texts\\cleaned\\pg42671_clean.txt" "texts\\training\\pg42671name.train")
-(create-sentence-training-file "texts\\cleaned\\pg42671_clean.txt" "texts\\training\\pg42671token.train")
+(create-name-training-file (slurp "texts\\cleaned\\gutenberg\\austen-persuasion.txt") "texts\\training\\persuasion_name.train")
+(comment
+(create-name-training-file (slurp "texts\\cleaned\\pg42671_clean.txt") "texts\\training\\pg42671_name.train")
+(create-sentence-training-file (slurp "texts\\cleaned\\pg42671_clean.txt") "texts\\training\\pg42671_sentence.train")
+;(create-token-training-file (slurp "texts\\cleaned\\pg42671_clean.txt") "texts\\training\\pg42671_token.train")
 
 
+(create-token-training-file
+  (apply str
+         (slurp "texts\\cleaned\\pg120.txt")
+         (slurp "texts\\cleaned\\pg1400.txt")
+         (slurp "texts\\cleaned\\pg98.txt")
+         (slurp "texts\\cleaned\\pg768.txt")
+         (slurp "texts\\cleaned\\pg84.txt")
+         (slurp "texts\\cleaned\\pg2591.txt")
+         (slurp "texts\\cleaned\\pg1661.txt")
+         (slurp "texts\\cleaned\\pg3177.txt")
+         (slurp "texts\\cleaned\\pg3176.txt")
+         (slurp "texts\\cleaned\\pg142.txt")
+         (slurp "texts\\cleaned\\pg41093.txt")
+         (slurp "texts\\cleaned\\pg41667.txt")
+         (slurp "texts\\cleaned\\pg44133.txt")
+         (slurp "texts\\cleaned\\gutenberg\\melville-moby_dick.txt")
+         (slurp "texts\\cleaned\\pg42671_clean.txt")
+         (slurp "texts\\cleaned\\gutenberg\\austen-emma.txt")
+         (slurp "texts\\cleaned\\gutenberg\\carroll-alice.txt")
+         (slurp "texts\\cleaned\\gutenberg\\chesterton-thursday.txt")
+         )
+  "texts\\training\\gutenberg_token.train")
+)
+
+(comment
+  (def token-model (opennlp.tools.train/train-tokenizer "texts\\training\\gutenberg_base_token.train"))
+  (opennlp.tools.train/write-model token-model "texts\\training\\gutenberg_base_token.bin")
+  )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
