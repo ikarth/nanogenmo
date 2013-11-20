@@ -7,6 +7,20 @@
 (def pos-tag (make-pos-tagger "models/en-pos-maxent.bin"))
 (def chunker (make-treebank-chunker "models/en-chunker.bin"))
 
+(defmacro chunk-filter-2
+  "Declare a filter for treebank-chunked lists with the given name and regex."
+  [n r]
+  (let [docstring (str "Given a list of treebank-chunked elements, "
+                       "return only the " n " in a list.")]
+    `(defn ~n
+       ~docstring
+       [elements#]
+       (filter (fn [t#] (if (nil? ~r)
+                          (nil? (:tag t#))
+                          (and (:tag t#)
+                               (re-find ~r (:tag t#)))))
+               elements#))))
+
 (defmacro fixed-chunk-filter
   "Declare a filter for treebank-chunked lists with the given name and regex."
   [n r]
@@ -18,7 +32,7 @@
        (filter (fn [t#] (re-find ~r (:tag t#))) 
                (remove #(nil? (:tag %)) elements#)))))
 
-(fixed-chunk-filter fixed-noun-phrases #"^NP$")
+(chunk-filter fixed-noun-phrases #"^NP$")
 
 (comment
 (pprint
@@ -31,17 +45,15 @@ altogether; Mr. Bingley, his two sisters, the husband of the eldest, and
 another young man."))))))
 )
 
-(comment
 (pprint 
   (chunker 
       (pos-tag 
         (tokenize "And when the party entered the assembly room, it consisted of only five
 altogether; Mr. Bingley, his two sisters, the husband of the eldest, and
 another young man."))))
-)
 
 (pprint
-  (noun-phrases
+  (fixed-noun-phrases
    (chunker 
      (pos-tag 
         (tokenize "And when the party entered the assembly room, it consisted of only five
@@ -50,15 +62,15 @@ another young man.")))))
 
 
 
-(comment
 (pprint
   (pos-tag 
     (tokenize "And when the party entered the assembly room, it consisted of only five
 altogether; Mr. Bingley, his two sisters, the husband of the eldest, and
 another young man.")))
 
-(pprint (noun-phrases
-          '({:phrase ["And"], :tag nil})))
+;(pprint (noun-phrases
+;          '({:phrase ["And"], :tag nil})))
+
 (comment
  {:phrase ["when"], :tag "ADVP"}
  {:phrase ["the" "party"], :tag "NP"}
@@ -74,6 +86,6 @@ another young man.")))
  {:phrase ["of"], :tag "PP"}
  {:phrase ["the" "eldest" "," "and"], :tag "NP"}
  {:phrase ["another" "young" "man"], :tag "NP"})
-)
+
 
 
