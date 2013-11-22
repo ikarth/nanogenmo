@@ -470,6 +470,106 @@ If not matched, output marker instead, and don't consume a-string."
 ;(def namefinder-model (opennlp.tools.train/train-name-finder "texts\\training\\pride-name-1.train"))
 ;(opennlp.tools.train/write-model namefinder-model "texts\\training\\pride-name-1.bin")
   
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Analysis
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn process-sentence [text]
+  (let [c-text text]
+    c-text))
+
+
+; iterate through sentence
+; if this is a preposition or a proper noun, mark which character it belongs to.
+;  if we have no character yet, mark CHAR=0
+;  if we have a character, and this is immidately after, see if it's part of the same name, if so discard it.
+;  if we have a character see if this is a reference to that character Mr. Darcy -> He or a new character.
+;  if this is a new character, mark as CHAR+1, repeat
+
+(defn is-char-token? [token]
+  (if (empty? token)
+    false
+    (let [s (second token)]
+      (cond
+        (= s "NNP") true
+        (= s "PRP") true
+        :else false))))
+ 
+
+(defn mark-characters [sentence-text]
+  (loop [tagged-text sentence-text
+         char ""
+         last-token [nil nil]
+         output []]
+    (if (empty? tagged-text)
+      output
+      (let [t# (first tagged-text)
+            p (if (is-char-token? last-token)
+                (if (is-char-token? t#)
+                  nil ;discard current
+                  (first t#))
+                (if (is-char-token? t#)
+                  (second t#)
+                  (first t#)))
+            o (if (nil? p) output (conj output p))]
+        (recur (rest tagged-text) char t# o)))))
+
+(defn find-chars [sentence]
+  (loop [text sentence
+         char ""
+         last-match [nil nil]
+         output []]
+    (if (empty? text)
+      output
+      (let [t (first text)
+            m (if (nil? (second t))
+                nil
+                (re-matches #"(NNP)" (second t)))
+            p (if (and (not (nil? m)) (= (second last-match) m))
+                (apply str (interpose " " [(first last-match) (first t)]))
+                (if (not (nil? m))
+                  (first t)
+                  nil))
+            o (if (nil? p) output (conj (butlast output) p))]
+        (recur (rest text) char [p m] o)))))
+                  
+(pos-filter names-filter #"(NNP|PRP)")
+
+(defn catalog-names [source-text]
+  (let [text (map #(-> % tokenize pos-tag) source-text)]
+     (distinct (mapcat find-chars text))))
+
+(defn catalog-names [source-text]
+  (let [text (map #(-> % tokenize name-find) source-text)]
+    text))
+    
+     ;(distinct (mapcat find-chars text))))
+
+     ;(name-find
+     
+     
+    ; ))
+  
+;(spit "texts\\output\\catalog-names.txt"
+;     (apply str (interpose "\r\n"
+;    (map #(apply str %)     
+;    (catalog-names
+;                         (get-sentences-from-text 
+;                      (slurp "texts\\cleaned\\pg42671.txt"))))))) 
+
+(pprint
+  (let [sentences (get-sentences-from-text 
+                    (slurp "texts\\cleaned\\pnp_excerpt.txt"))
+        t-text (map #(-> % tokenize pos-tag) sentences)
+        output (map mark-characters t-text)
+        ]
+    output))
+
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
@@ -507,6 +607,36 @@ If not matched, output marker instead, and don't consume a-string."
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(comment
  (pprint
    (map noun-phrases
         (map chunker
@@ -515,7 +645,7 @@ If not matched, output marker instead, and don't consume a-string."
                        (mapcat get-sentences
                                (just-get-sentences
                                  (slurp "texts\\cleaned\\pg42671.txt")
-                                 )))))))
+                                 ))))))))
                   
                   
 ;                  '(["With"  "the"  "Gardiners"  ","  "they"  "were"  "always"  "on"
