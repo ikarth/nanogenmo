@@ -288,8 +288,8 @@
 (defn brute-force-is-name? [token]
   "Returns true if the token is a name."
   (cond
-    (re-find #"^(Countess|Lady|Mrs.|Mrs|Miss)$" token) true
-    (re-find #"^(King|Queen|Duke|Duchess|Admiral|Captain|Colonel|Viscountess|Viscount|Hon.|Lord|Sir|Mr.|Mr|St.|Nurse|Doctor|Dr.|Dr|Dowager)$" token) true
+    (re-find #"^(Countess|Duchess|Viscountess|Lady|Dowager|Mrs.|Mrs|Miss)$" token) true
+    (re-find #"^(King|Queen|Duke|Admiral|Captain|Colonel|Viscount|Hon.|Lord|Sir|Mr.|Mr|St.|Doctor|Dr.|Dr)$" token) true
     (re-find #"^(Bennets|Lucases|Harvilles|Gardiners|Collinses|Ibbotsons|Durands|Musgroves)$" token) true
     (re-find #"^(Elizabeth|Catherine|Charlotte|Caroline|Christopher|Edmund|Edward|Georgina|Henrietta|James|Lousia|Penelope|Fredrick|Fredric|William|George|Harry|Henry|Charles|Basil|Kitty|Eleanor|Elinor|Walter|Lizzy|Lydia|Louisa|Alicia|Maria|Jemima|Sarah|Jane|John|Anne|Harriet|Mary|Pen|Anna|Dick)$" token) true
     (re-find #"^(Musgrove|Wentworth|Harville|Hayter|Trent|Brigden|Musgrove|Benwick|Bennet|Bingley|Lucas|Carteret|Hurst|Smith|Darcy|Gardiner|Wickham|Collins|Rooke|Wallis|Fitzwilliam|de|Bourgh|Elliot|Russell|Shepherd|Clay|Long|Frankland|Morley|Metcalfe|Nicholls|Phillips|Pope|Pratt|Reynolds|Robinson|Stone|Watson|Webbs|Younge|Jenkinson|Jones|King|Long|Goulding|Grierson|Grantley|Haggerston|Harrington|Annesley|Chamberlayne|Dawson|Denny|Forster|Croft|Brand|Atkinson|Mackenzie|Hamilton|Dalrymple|Speed|Maclean|Ives|Spicer|Shirley|Morris)$" token) true
@@ -544,7 +544,60 @@ If not matched, output marker instead, and don't consume a-string."
 (defn catalog-names [source-text]
   (let [text (map #(-> % tokenize name-find) source-text)]
     text))
+
+; Take a sentence, mark the actors in it.
+; Take an actor-marked sentence, add new actors. 
+
+(defn determine-name-gender [text-name]
+  "NAME")
+
+(defn is-actor-name? [text-token]
+  (if (not (and (second text-token) (string? (second text-token))))
+    false
+    (let [r (re-matches #"(NNP|NNPS|PRP|PRP\$)" (second text-token))
+          y (if (and r (string? (first text-token)))
+              ;(if (name-find text-token)
+                ;(second text-token)
+                text-token
+                false)]
+      y)))
     
+(defn mark-actors [source-text]
+  (loop [text source-text
+         current-char nil
+         last-token [nil nil] 
+         output []]
+    (if (empty? text)
+      output
+      (let [token (first text)
+            match (is-actor-name? token)
+            name-gender (if match (determine-name-gender (first token)) nil)
+            merge-with-last (is-actor-name? last-token)
+            c (if (and (not (nil? current-char)) (= name-gender current-char))
+                current-char
+                name-gender); (inc (second current-char))])
+            p (if name-gender (second token) (first token))
+            out (if (and match merge-with-last)
+                  (conj (vec (butlast output)) p)
+                  (conj output p))]
+        (recur (rest text) c token out))
+      )))
+
+(defn process-data [source-text]
+  (map #(-> % tokenize pos-tag mark-actors) source-text))
+
+(defn generate-recharacterization [source-text]
+  (let [name-list (catalog-names source-text)
+        action-list (process-data source-text)]
+    ))
+
+(pprint
+  (process-data
+    (get-sentences-from-text 
+      (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
+
+
+
      ;(distinct (mapcat find-chars text))))
 
      ;(name-find
@@ -552,20 +605,23 @@ If not matched, output marker instead, and don't consume a-string."
      
     ; ))
   
-;(spit "texts\\output\\catalog-names.txt"
-;     (apply str (interpose "\r\n"
-;    (map #(apply str %)     
-;    (catalog-names
-;                         (get-sentences-from-text 
-;                      (slurp "texts\\cleaned\\pg42671.txt"))))))) 
+(comment
+  (spit "texts\\output\\catalog-names.txt"
+        (apply str (interpose "\r\n"
+                              (map #(apply str %)     
+                                   (catalog-names
+                                     (get-sentences-from-text 
+                                       (slurp "texts\\cleaned\\pg42671.txt")))))))
+  )
 
+(comment
 (pprint
-  (let [sentences (get-sentences-from-text 
-                    (slurp "texts\\cleaned\\pnp_excerpt.txt"))
-        t-text (map #(-> % tokenize pos-tag) sentences)
-        output (map mark-characters t-text)
-        ]
-    output))
+ (let [sentences (get-sentences-from-text 
+                   (slurp "texts\\cleaned\\pnp_excerpt.txt"))
+       t-text (map #(-> % tokenize pos-tag) sentences)
+       output (map mark-characters t-text)
+       ]
+   output)))
 
 
 
