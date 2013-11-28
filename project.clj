@@ -13,6 +13,7 @@
                  [clojure-opennlp "0.3.1"]
                  ;[clojure-opennlp "0.3.2-SNAPSHOT"]
                  [clj-wordnik "0.1.0-alpha1"]
+                 [clj-wordnet "0.0.5"]
                  ]
   :main ^:skip-aot nanogenmo.core
   :target-path "target/%s"

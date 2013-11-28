@@ -3,7 +3,9 @@
             [opennlp.nlp]
             [opennlp.treebank]
             [opennlp.tools.filters]
-            [opennlp.tools.train])
+            [opennlp.tools.train]
+            [clj-wordnet.core]
+            )
   (:use [clojure.pprint]
         [opennlp.nlp]
         [opennlp.treebank]
@@ -21,6 +23,8 @@
 (def name-find (make-name-finder "models/namefind/en-ner-person.bin"))
 (def chunker (make-treebank-chunker "models/en-chunker.bin"))
 (def parser (make-treebank-parser "models/en-parser-chunking.bin"))
+
+(def wordnet (clj-wordnet.core/make-dictionary "texts/dict/"))
 
 ;;; Workaround until the bug gets fixed...
 ;(defmacro fixed-chunk-filter
@@ -476,10 +480,43 @@ If not matched, output marker instead, and don't consume a-string."
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(def example-name-list 
+  [{:name "Elizabeth" :gender :feminine}
+   {:name "Mr. Darcy" :gender :masculine}
+   {:name "Emma" :gender :feminine}
+   {:name "Mr. Bennet" :gender :masculine}
+   {:name "Mr. Bingley" :gender :masculine}
+   {:name "Mrs. Bennet" :gender :feminine}
+   {:name "Mary" :gender :feminine}
+   {:name "Lady Lucas" :gender :feminine}
+   {:name "Sir William" :gender :masculine}
+   {:name "Netherfield" :gender :place}
+   {:name "London" :gender :place}
+   {:name "Mr. Darcy" :gender :masculine}
+   {:name "Derbyshire" :gender :place}
+   {:name "Miss Bingley" :gender :feminine}
+   {:name "Elizabeth" :gender :feminine}
+   {:name "Jane" :gender :feminine}
+   {:name "Lydia" :gender :feminine}
+   {:name "England" :gender :place}
+   {:name "Mr." :gender :masculine}
+   {:name "Mrs. Hurst" :gender :feminine}
+   {:name "Netherfield House" :gender :place}
+   {:name "Bingley" :gender :masculine}
+   {:name "Darcy" :gender :masculine}
+   {:name "Meryton" :gender :place}
+   {:name "Miss Bennet" :gender :feminine}
+   {:name "Lucas Lodge" :gender :place}
+   {:name "James" :gender :masculine}
+   {:name "Miss" :gender :feminine}
+   {:name "Miss Lucas" :gender :feminine}
+   {:name "Sir William Lucas" :gender :masculine}
+   ])
+
+
 (defn process-sentence [text]
   (let [c-text text]
     c-text))
-
 
 ; iterate through sentence
 ; if this is a preposition or a proper noun, mark which character it belongs to.
@@ -496,7 +533,6 @@ If not matched, output marker instead, and don't consume a-string."
         (= s "NNP") true
         (= s "PRP") true
         :else false))))
- 
 
 (defn mark-characters [sentence-text]
   (loop [tagged-text sentence-text
@@ -537,19 +573,51 @@ If not matched, output marker instead, and don't consume a-string."
                   
 (pos-filter names-filter #"(NNP|PRP)")
 
-(defn catalog-names [source-text]
+(defn catalog-names-1 [source-text]
   (let [text (map #(-> % tokenize pos-tag) source-text)]
-     (distinct (mapcat find-chars text))))
+    (distinct
+        (mapcat find-chars text))))
 
-(defn catalog-names [source-text]
+(defn catalog-names-2 [source-text]
   (let [text (map #(-> % tokenize name-find) source-text)]
-    text))
+    (distinct
+      (mapcat concat
+              (remove #(empty? %)
+                      text)))))
 
 ; Take a sentence, mark the actors in it.
 ; Take an actor-marked sentence, add new actors. 
 
-(defn determine-name-gender [text-name]
-  "NAME")
+(defn genderize-name [name name-list]
+  (let [n (filter #(= (:name %)) name-list)
+        g (if (seq? n)
+            (:gender (first n))
+            false)]
+    g))
+
+(defn determine-name-gender [text-name-token]
+  [(second text-name-token)
+   (cond 
+     (re-matches #"(PRP|PRP\$)" (second text-name-token))
+     (cond
+       (re-matches #"(I|me|my|mine|myself)" (first text-name-token))
+       :first-person
+       (re-matches #"(you|your|your|yourself)" (first text-name-token))
+       :second-person
+       (re-matches #"(she|her|hers|herself)" (first text-name-token))
+       :feminine
+       (re-matches #"(he|him|his|himself)" (first text-name-token))
+       :masculine
+       (re-matches #"(they|them|their|theirs|themself|themselves|we|us|our|ourselves)" (first text-name-token))
+       :general
+       :else :general)     
+     :else (genderize-name (first text-name-token) example-name-list))
+   (first text-name-token)
+   ])
+  
+  ;(cond 
+  ;  (re-matches #"PRP" (second text-name-token))
+  
 
 (defn is-actor-name? [text-token]
   (if (not (and (second text-token) (string? (second text-token))))
@@ -561,42 +629,139 @@ If not matched, output marker instead, and don't consume a-string."
                 text-token
                 false)]
       y)))
-    
+
+(defn annotate-names [source-text]
+  "Take a sentence and return the same sentence with likely names tagged."
+  (loop [text source-text
+         output []]
+    (if (empty? text)
+      output
+      (let [token (first text)
+            match (re-matches #"(NNP|NNPS)" (second token))
+            out (if match
+                  (conj output "<START>" (first token) "<END>")
+                  (conj output (first token)))]
+        (recur (rest text) out))
+      )))
+  
+
 (defn mark-actors [source-text]
   (loop [text source-text
          current-char nil
-         last-token [nil nil] 
+         last-token [nil nil nil] 
          output []]
     (if (empty? text)
       output
       (let [token (first text)
             match (is-actor-name? token)
-            name-gender (if match (determine-name-gender (first token)) nil)
+            name-gender (if match (determine-name-gender token) nil)
             merge-with-last (is-actor-name? last-token)
             c (if (and (not (nil? current-char)) (= name-gender current-char))
                 current-char
                 name-gender); (inc (second current-char))])
-            p (if name-gender (second token) (first token))
+            p (if name-gender name-gender (first token))
             out (if (and match merge-with-last)
                   (conj (vec (butlast output)) p)
                   (conj output p))]
         (recur (rest text) c token out))
       )))
 
+
+;(defn pick-pronoun [gender pronoun]
+;  (cond
+;    (= "PRP" pronoun)
+;    (cond 
+;      (= gender :masculine) "he"
+;      (= gender :feminine) "she"
+;      :else "they"
+;    (= "PRP$" pronoun) 
+;  )
+
+;; take a sentence
+;; figure out who the characters are in it
+;; substitute the new characters
+;; return the new sentence
+
+(defn substitute-characters [sentence char-list]
+  (loop [text sentence
+         last-char nil
+         chars char-list
+         output []]
+    (if (empty? text)
+      output
+      (if (vector? (first text))
+        (let [t (first text)
+              same-char (cond
+                          (= last-char nil) false
+                          (= last-char "NNP") false                          
+                          (= last-char "PRP") true ; assume pronouns refer to last named character...for now.
+                          :else false                         
+                          )
+              c (if same-char last-char (first t))
+              cl (if same-char chars (rest chars))
+              w t
+              ;(if same-char
+              ;(cond
+              ;  (re-matches #"(NNP|NNPS)" (first t))
+              ;  (:name (first cl))
+              ;  (re-matches #"(PRP|PRP\$)" (first t))
+              ;  (pick-pronoun (:gender (first cl)) (first t))
+              ]
+          (recur (rest text) last-char cl (conj output w)))
+        (recur (rest text) last-char chars (conj output (first text))))))) 
+
+(defn enumerate-characters-in-sentence [sentence char-list]
+  ;(detokenize
+    (loop [text sentence
+           char-tag nil
+           char-count 0
+           output []]
+      (if (empty? text)
+        output
+        (if (vector? (first text))
+          (let [t (first text)
+                same-char (cond
+                            (or (= char-tag :first-person) (= (second t) :first-person)) (= char-tag (second t))
+                            (or (= char-tag :second-person) (= (second t) :second-person)) (or (= char-tag (second t) (= char-tag :general) (= (second t) :general)))
+                            (= char-tag :general) true
+                            (= char-tag (second t)) true
+                            (= (second t) :general) true
+                            :else false);;(= char-tag (second t)) 
+                c (second t)
+                count (if same-char (inc char-count) char-count)
+                w count
+                ]
+            (recur (rest text) c count (conj output w)))
+          (recur (rest text) char-tag char-count (conj output (first text)))))))
+
+
 (defn process-data [source-text]
   (map #(-> % tokenize pos-tag mark-actors) source-text))
 
 (defn generate-recharacterization [source-text]
-  (let [name-list (catalog-names source-text)
+  (let [name-list (catalog-names-1 source-text)
         action-list (process-data source-text)]
+    (map #(substitute-characters % name-list) action-list)
     ))
 
+(defn annotate-names-in-text [source-text]
+  (map #(-> % tokenize pos-tag annotate-names detokenize) source-text)) 
+
+
+(comment  
+(spit "texts\\training\\gutenberg-annotate-names.train"
+      (apply str (interpose "\r\n"
+                            (annotate-names-in-text
+                              (get-sentences-from-text 
+                                  (slurp  "texts\\training\\gutenberg-source-text.train"))))))
+)
+
+(comment
 (pprint
-  (process-data
-    (get-sentences-from-text 
+  (generate-recharacterization
+     (get-sentences-from-text 
       (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
-
-
+)
 
      ;(distinct (mapcat find-chars text))))
 
@@ -604,15 +769,16 @@ If not matched, output marker instead, and don't consume a-string."
      
      
     ; ))
-  
+
 (comment
-  (spit "texts\\output\\catalog-names.txt"
-        (apply str (interpose "\r\n"
-                              (map #(apply str %)     
-                                   (catalog-names
-                                     (get-sentences-from-text 
-                                       (slurp "texts\\cleaned\\pg42671.txt")))))))
-  )
+(spit "texts\\output\\gutenberg-catalog-names-2.txt"
+    (apply str (interpose "\r\n"
+                         (catalog-names-2
+                             (get-sentences-from-text 
+                               (slurp  "texts\\training\\gutenberg-source-text.train"))))))
+)
+
+
 
 (comment
 (pprint
@@ -625,6 +791,101 @@ If not matched, output marker instead, and don't consume a-string."
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Chunking for name subsitiution
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn is-phrase-name? [chunk]
+  (if (empty? (name-find (:phrase chunk)))
+    false
+    true
+    ))
+  
+(defn gen-output-action [action names]
+  "Take a chunked sentence, and walk through it, outputting as an action..."
+  (loop [act action
+         last-char nil
+         name-list (shuffle names) 
+         output []]
+    (if (empty? act)
+      output
+      (let [t (first act)
+            c (if (= (:tag t) "NP") ; is this a name?
+                (is-phrase-name? t)
+                false)
+            same-char (if (nil? last-char);what name do we use?
+                        false        
+                        )
+            n-list (if same-char name-list (rest name-list))
+            n (first n-list)
+            cur-char last-char
+            p (if c [n] (:phrase t))
+            o (conj output p)]
+        (recur (rest act) cur-char name-list o)))))
+
+(defn output-action [action]
+  (clojure.string/join [
+         (detokenize (into [] (mapcat concat action)))
+         "."]))
+
+(defn swap-names [source-text]
+  (let [name-list (catalog-names-1 source-text)
+        action-list (map #(apply str (clojure.string/join " " (tokenize %))) source-text)
+        chunked-list (map #(-> % tokenize pos-tag chunker) source-text)
+        ;parsed-list (map #(array-map :parsed (parser [%]) :text %) action-list)
+        ;filtered-parsed (map #( (:parsed %))
+        made-actions (map #(gen-output-action % name-list) chunked-list)
+        ]
+    
+    
+    ;(map #(substitute-characters % name-list) action-list)
+    ;(map #(detokenize (into [] (mapcat concat %))) made-actions)
+    made-actions
+    ))
+
+
+
+
+(spit "texts\\output\\gutenberg-jumble.txt"
+      (apply str 
+             (mapcat concat
+                     (let [actions ;(map #(apply str (concat % [["."]]))
+                           (swap-names
+                             (get-sentences-from-text 
+                               (slurp  "texts\\training\\gutenberg-source-text.train")))]
+                       (loop [count 0 output []]
+                         (if (> count 500)
+                           (mapcat concat output)
+                           (recur (inc count)
+                                  (conj output 
+                                        (conj
+                                          (interpose " " 
+                                             (map output-action 
+                                                  (take (+ 1 (rand-int 7)) (shuffle actions))))
+                                          "\r\n\r\n")
+                                        ))))))))
+         
+
+;(let 
+
+;(spit "texts\\output\\shuffled-5.txt"
+;      (doall
+;        (let [actions (swap-names
+;                        (get-sentences-from-text 
+;                        (slurp "texts\\training\\gutenberg-source-text.train")))]
+;          (doall (take 200 (doall
+;                         (repeatedly
+;                           #(apply str (doall (take 5 (shuffle actions)))
+;                                  "\r\n"))))))))
+  
+;(pprint                          
+  ;(map output-action 
+  ;     (shuffle
+  ;       (swap-names
+  ;         (get-sentences-from-text 
+  ;           (slurp "texts\\training\\gutenberg-source-text.train"))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
