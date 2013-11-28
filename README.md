@@ -1,10 +1,10 @@
 # nanogenmo
 
-FIXME: description
+National Novel Generation Month Project 2013 
 
 ## Installation
 
-Download from http://example.com/FIXME.
+Run from the source; some assembly required.
 
 ## Usage
 
@@ -14,7 +14,7 @@ FIXME: explanation
 
 ## Options
 
-FIXME: listing of options this app accepts.
+FIXME: listing of options this app accepts (none yet). 
 
 ## Examples
 
@@ -30,7 +30,6 @@ FIXME: listing of options this app accepts.
 
 ## License
 
-Copyright © 2013 FIXME
+Copyright © 2013 Isaac Karth
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+Distributed under the Eclipse Public License either version 1.0.
