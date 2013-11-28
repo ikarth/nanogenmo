@@ -2,6 +2,12 @@
 
 National Novel Generation Month Project 2013 
 
+## Results
+
+So far, results include:
+Pride & Prejudice: Action Edition https://gist.github.com/ikarth/7437244
+Gutenberg Shuffle https://gist.github.com/ikarth/7687240
+
 ## Installation
 
 Run from the source; some assembly required.
