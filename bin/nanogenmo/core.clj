@@ -562,7 +562,7 @@ If not matched, output marker instead, and don't consume a-string."
       (let [t (first text)
             m (if (nil? (second t))
                 nil
-                (re-matches #"(NNP)" (second t)))
+                (re-matches #"(NNP|NNPS)" (second t)))
             p (if (and (not (nil? m)) (= (second last-match) m))
                 (apply str (interpose " " [(first last-match) (first t)]))
                 (if (not (nil? m))
@@ -847,8 +847,8 @@ If not matched, output marker instead, and don't consume a-string."
 
 
 
-
-(spit "texts\\output\\gutenberg-jumble.txt"
+(defn output-gutenberg-shuffle []
+(spit "texts\\output\\gutenberg-shuffle.txt"
       (apply str 
              (mapcat concat
                      (let [actions ;(map #(apply str (concat % [["."]]))
@@ -856,7 +856,7 @@ If not matched, output marker instead, and don't consume a-string."
                              (get-sentences-from-text 
                                (slurp  "texts\\training\\gutenberg-source-text.train")))]
                        (loop [count 0 output []]
-                         (if (> count 500)
+                         (if (> count 5000)
                            (mapcat concat output)
                            (recur (inc count)
                                   (conj output 
@@ -866,7 +866,7 @@ If not matched, output marker instead, and don't consume a-string."
                                                   (take (+ 1 (rand-int 7)) (shuffle actions))))
                                           "\r\n\r\n")
                                         ))))))))
-         
+        ) 
 
 ;(let 
 
@@ -920,19 +920,41 @@ If not matched, output marker instead, and don't consume a-string."
  (pnp-action-edition))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Book output
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn get-data [source-text]
+  (paragraph-to-typed-sentences
+    (categorize-text 
+      (map #(clojure.string/replace % "`" "'")
+           (input-source-text-directly
+             source-text)))))
+
+(defn make-chapter [] )
+(defn make-scene [] )
+
+(defn make-book []
+  (let [raw-text (slurp "texts\\cleaned\\pnp_excerpt.txt")
+        paragraphs (get-data raw-text)
+        source-text (flatten (vals (mapcat :categorized paragraphs)))       
+        name-list (distinct (concat (catalog-names-2 source-text) (catalog-names-1 source-text)))
+        action-sentences (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))
+        actions (map #(hash-map :text %
+                                :tokenized (tokenize %) 
+                                ;:parsed (parser %) 
+                                :pos (pos-tag (tokenize %)) 
+                                
+                                ) action-sentences) 
+        ]
+    action-sentences))
 
 
-
-
-
-
-
-
-
-
-
-
-
+(pprint
+(make-book) 
+)
 
 
 
