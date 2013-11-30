@@ -5,8 +5,10 @@ National Novel Generation Month Project 2013
 ## Results
 
 So far, results include:
-Pride & Prejudice: Action Edition https://gist.github.com/ikarth/7437244
-Gutenberg Shuffle https://gist.github.com/ikarth/7687240
+
+[Pride & Prejudice: Action Edition] (https://gist.github.com/ikarth/7437244)
+
+[Gutenberg Shuffle] (https://gist.github.com/ikarth/7687240)
 
 ## Installation
 
@@ -38,4 +40,4 @@ FIXME: listing of options this app accepts (none yet).
 
 Copyright © 2013 Isaac Karth
 
-Distributed under the Eclipse Public License either version 1.0.
+Distributed under the Eclipse Public License version 1.0. Some portions under other licences.

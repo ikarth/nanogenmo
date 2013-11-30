@@ -933,6 +933,41 @@ If not matched, output marker instead, and don't consume a-string."
            (input-source-text-directly
              source-text)))))
 
+(defn token-is-name? [token]
+  :doc "Takes a POS-tagged token and returns true is the token is probably a name."
+  (if (re-matches #"(NNP|NNPS)" (:tag token))
+    true
+    false
+  ))
+
+(defn combine-name-vectors [tokenized-sentence]
+ (reduce
+   #(cond
+      (and (map? %1) (map? %2))
+      (flatten (concat [(merge %1 
+                               (merge %2 
+                                      {:word 
+                                       (clojure.string/join " " [(:word %1)
+                                                                 (:word %2)])}) )]))      
+      (and (map? (last %1)) (map? %2))
+      (flatten (concat [(butlast %1) 
+                        (merge (last %1) 
+                               (merge %2 
+                                      {:word 
+                                       (clojure.string/join " " [(:word (last %1))
+                                                                 (:word %2)])}) )]))
+      :else (flatten (concat [%1 %2]))
+      )
+   tokenized-sentence))
+
+(defn mark-names [tokenized-sentence]
+  "Take a pos-tagged, tokenized sentence, and return it with the names replaced with functions."
+  (combine-name-vectors
+       (map #(if (token-is-name? %) % (:word %)) ;filter out names
+            (map #(hash-map :word (first %)
+                       :tag (second %))
+                 tokenized-sentence))))
+
 (defn make-chapter [] )
 (defn make-scene [] )
 
@@ -942,14 +977,19 @@ If not matched, output marker instead, and don't consume a-string."
         source-text (flatten (vals (mapcat :categorized paragraphs)))       
         name-list (distinct (concat (catalog-names-2 source-text) (catalog-names-1 source-text)))
         action-sentences (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))
-        actions (map #(hash-map :text %
-                                :tokenized (tokenize %) 
-                                ;:parsed (parser %) 
-                                :pos (pos-tag (tokenize %)) 
-                                
-                                ) action-sentences) 
+        actions-list (map #(hash-map ;:text %
+                                     ;:tokenized (tokenize %) 
+                                     ;:parsed (parser [(clojure.string/join " " (tokenize %))]) 
+                                     ;:pos (pos-tag (tokenize %))
+                                     ;:chunked (chunker (pos-tag (tokenize %)))
+                                     :processed (into [] (mark-names (pos-tag (tokenize %))))
+                                     ) action-sentences) 
         ]
-    action-sentences))
+    ;(map #(if (fn? %) (% 3) %) 
+        ; (:processed actions)
+    ;     )
+    actions-list
+    ))
 
 
 (pprint
