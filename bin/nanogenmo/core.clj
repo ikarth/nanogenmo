@@ -214,6 +214,29 @@
   ;(mapcat #(category (:categorized %)) paragraphs))
 
   
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Source Data
+;;
+;; Data other than the base text files.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn get-data-file [data-file] 
+  (clojure.string/split (first
+    (input-source-text-directly (slurp data-file)))
+  #" "))
+  
+;; TODO: add the frequency to the names and sort the list by it...
+(defn census-name-list []
+  "Returns a lazy-seq containing names derived from US Census."
+  (let [male (map #(hash-map :word % :gender :masculine) 
+                    (get-data-file "texts\\names\\male.first.txt"))
+        female (map #(hash-map :word % :gender :feminine) 
+                      (get-data-file "texts\\names\\female.first.txt"))]
+    (concat female male)))
+        ;(interleave male female)))))
+  
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
 ;;; Actions
@@ -292,8 +315,8 @@
 (defn brute-force-is-name? [token]
   "Returns true if the token is a name."
   (cond
-    (re-find #"^(Countess|Duchess|Viscountess|Lady|Dowager|Mrs.|Mrs|Miss)$" token) true
-    (re-find #"^(King|Queen|Duke|Admiral|Captain|Colonel|Viscount|Hon.|Lord|Sir|Mr.|Mr|St.|Doctor|Dr.|Dr)$" token) true
+    (re-find #"^(Queen|Countess|Duchess|Viscountess|Lady|Dowager|Mrs.|Mrs|Miss)$" token) true
+    (re-find #"^(King|Duke|Admiral|Captain|Colonel|Viscount|Hon.|Lord|Sir|Mr.|Mr|St.|Doctor|Dr.|Dr)$" token) true
     (re-find #"^(Bennets|Lucases|Harvilles|Gardiners|Collinses|Ibbotsons|Durands|Musgroves)$" token) true
     (re-find #"^(Elizabeth|Catherine|Charlotte|Caroline|Christopher|Edmund|Edward|Georgina|Henrietta|James|Lousia|Penelope|Fredrick|Fredric|William|George|Harry|Henry|Charles|Basil|Kitty|Eleanor|Elinor|Walter|Lizzy|Lydia|Louisa|Alicia|Maria|Jemima|Sarah|Jane|John|Anne|Harriet|Mary|Pen|Anna|Dick)$" token) true
     (re-find #"^(Musgrove|Wentworth|Harville|Hayter|Trent|Brigden|Musgrove|Benwick|Bennet|Bingley|Lucas|Carteret|Hurst|Smith|Darcy|Gardiner|Wickham|Collins|Rooke|Wallis|Fitzwilliam|de|Bourgh|Elliot|Russell|Shepherd|Clay|Long|Frankland|Morley|Metcalfe|Nicholls|Phillips|Pope|Pratt|Reynolds|Robinson|Stone|Watson|Webbs|Younge|Jenkinson|Jones|King|Long|Goulding|Grierson|Grantley|Haggerston|Harrington|Annesley|Chamberlayne|Dawson|Denny|Forster|Croft|Brand|Atkinson|Mackenzie|Hamilton|Dalrymple|Speed|Maclean|Ives|Spicer|Shirley|Morris)$" token) true
@@ -933,27 +956,59 @@ If not matched, output marker instead, and don't consume a-string."
            (input-source-text-directly
              source-text)))))
 
-(defn token-is-name? [token]
-  :doc "Takes a POS-tagged token and returns true is the token is probably a name."
-  (if (re-matches #"(NNP|NNPS)" (:tag token))
-    true
-    false
+(defn name-census [word]
+  (let [matches (filter #(= word (:word %)) (census-name-list))]
+    (if (nil? matches)
+      nil
+      (:gender (first matches)))))
+
+(defn guess-gender [word]
+  "Takes a noun or pronoun and tries to guess the grammatical gender."
+  (cond 
+    (re-matches #"(I|me|my|mine|myself)" word) :first-person
+    (re-matches #"(You|Your|Yourself|you|your|your|yourself)" word) :second-person
+    (re-matches #"(She|Herself|Hers|Her|she|her|hers|herself)" word) :feminine
+    (re-matches #"(He|Him|His|Himself|he|him|his|himself)" word) :masculine
+    (re-matches #"(They|Them|Their|Theirs|Themself|Themselves|We|Us|Our|Ourselves|they|them|their|theirs|themself|themselves|we|us|our|ourselves)" word) :group
+    (re-matches #"(It|it|Itself|itself)" word) :neuter
+    (re-find #"(Queen|Countess|Duchess|Viscountess|Lady|Dowager|Mrs\.|Mrs |Miss)" word) :feminine
+    (re-find #"(King|Duke|Admiral|Captain|Colonel|Viscount|Hon\.|Lord|Sir|Mr\.|Mr |St\.|Doctor|Dr\.|Dr )" word) :masculine
+    ;(re-find #"(Bennets|Lucases|Harvilles|Gardiners|Collinses|Ibbotsons|Durands|Musgroves)" word) :group
+    ;(re-find #"(Elizabeth|Catherine|Charlotte|Caroline|Georgina|Henrietta|Lousia|Penelope|Kitty|Eleanor|Elinor|Lizzy|Lydia|Louisa|Alicia|Maria|Jemima|Sarah|Jane|Anne|Harriet|Mary|Pen|Anna|Anne)" word) :feminine
+    ;(re-find #"(Christopher|Edmund|Edward|Walter|Fredrick|Fredric|William|George|James|Harry|Henry|Charles|Basil|Dick|John)" word) :masculine
+    ;(re-find #"^(Musgrove|Wentworth|Harville|Hayter|Trent|Brigden|Musgrove|Benwick|Bennet|Bingley|Lucas|Carteret|Hurst|Smith|Darcy|Gardiner|Wickham|Collins|Rooke|Wallis|Fitzwilliam|de|Bourgh|Elliot|Russell|Shepherd|Clay|Long|Frankland|Morley|Metcalfe|Nicholls|Phillips|Pope|Pratt|Reynolds|Robinson|Stone|Watson|Webbs|Younge|Jenkinson|Jones|King|Long|Goulding|Grierson|Grantley|Haggerston|Harrington|Annesley|Chamberlayne|Dawson|Denny|Forster|Croft|Brand|Atkinson|Mackenzie|Hamilton|Dalrymple|Speed|Maclean|Ives|Spicer|Shirley|Morris)$" word) true
+    :else (name-census word) 
   ))
 
+(defn merge-gender [g1 g2]
+  (if (nil? g1) 
+    g2
+    (if (nil? g2)
+      g1
+      g1)))
+
+(defn token-is-name? [token]
+  :doc "Takes a POS-tagged token and returns true is the token is probably a name."
+  (cond
+    (re-matches #"(NNP|NNPS)" (:tag token)) true
+    (re-matches #"(PRP|PRP\$)" (:tag token)) true
+    :else false))
+
 (defn combine-name-vectors [tokenized-sentence]
- (reduce
-   #(cond
+ (reduce #(cond
       (and (map? %1) (map? %2))
       (flatten (concat [(merge %1 
                                (merge %2 
-                                      {:word 
+                                      {:gender (merge-gender (:gender %1) (:gender %2))
+                                       :word 
                                        (clojure.string/join " " [(:word %1)
                                                                  (:word %2)])}) )]))      
       (and (map? (last %1)) (map? %2))
       (flatten (concat [(butlast %1) 
                         (merge (last %1) 
                                (merge %2 
-                                      {:word 
+                                      {:gender (merge-gender (:gender (last %1)) (:gender %2))
+                                       :word 
                                        (clojure.string/join " " [(:word (last %1))
                                                                  (:word %2)])}) )]))
       :else (flatten (concat [%1 %2]))
@@ -963,13 +1018,81 @@ If not matched, output marker instead, and don't consume a-string."
 (defn mark-names [tokenized-sentence]
   "Take a pos-tagged, tokenized sentence, and return it with the names replaced with functions."
   (combine-name-vectors
-       (map #(if (token-is-name? %) % (:word %)) ;filter out names
-            (map #(hash-map :word (first %)
-                       :tag (second %))
-                 tokenized-sentence))))
+      (map #(if (token-is-name? %) % (:word %)) ;filter out names
+           (map #(hash-map :word (first %)
+                       :tag (second %)
+                      :gender (guess-gender (first %))
+                      )
+                tokenized-sentence))))
+
+(defn translate-pronouns [word]
+  (cond
+    (= (:tag word) "NNP") "NNP"
+    (= (:tag word) "PRP") "PRP"
+    :else (:word word)))
+
+
+(defn number-characters [sentence]
+  "Take a processed sentence and mark which character is associated with each noun and pronoun."
+  (loop [input sentence
+         output []
+         char-count 0
+         last-char nil
+         ]
+    (if (empty? input)
+      output
+      (let [word (first input)
+            m? (map? word)
+            n? (if m? 
+                 (= (:tag word) "NNP") 
+                 false)
+            chars (if n? (inc char-count) char-count)
+            output-word (if n? (merge word {:count chars}) word)
+            cur-char last-char
+            ]
+        (recur (rest input) (conj output output-word) chars cur-char)))))
+  
+
+(comment
+(defn insert-characters [sentence char-list]
+ (loop [input (:processed sentence)
+        output []
+        characters char-list
+        last-char nil
+        ]
+   (if (empty? input)
+     output
+     (let [word (first input)
+           name? (map? word)
+           new-character? (if (map? word)
+                            (cond
+                              (= (:tag word) "NNP") true
+                              (= (:tag word) "PRP") (if (nil? last-char)
+                                                      true
+                                                      false)
+                              :else false)
+                            false)
+           c-list (if new-character? (rest characters) characters)
+           current-char (if new-character? (first c-list) last-char)
+           output-word (if (map? word)
+                         (translate-pronouns word)
+                         word)
+           ]
+       (recur (rest input) (conj output output-word) c-list current-char)))))
+)
+    
+;(defn insert-characters [sentence char-list]
+;(map
+; #(cond
+   ;    (map? %) (first char-list)
+   ;    :else %)
+   ; (:processed sentence)))
 
 (defn make-chapter [] )
 (defn make-scene [] )
+
+(defn make-sentence [action character-list]
+  )
 
 (defn make-book []
   (let [raw-text (slurp "texts\\cleaned\\pnp_excerpt.txt")
@@ -977,23 +1100,29 @@ If not matched, output marker instead, and don't consume a-string."
         source-text (flatten (vals (mapcat :categorized paragraphs)))       
         name-list (distinct (concat (catalog-names-2 source-text) (catalog-names-1 source-text)))
         action-sentences (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))
-        actions-list (map #(hash-map ;:text %
-                                     ;:tokenized (tokenize %) 
-                                     ;:parsed (parser [(clojure.string/join " " (tokenize %))]) 
-                                     ;:pos (pos-tag (tokenize %))
-                                     ;:chunked (chunker (pos-tag (tokenize %)))
-                                     :processed (into [] (mark-names (pos-tag (tokenize %))))
-                                     ) action-sentences) 
-        ]
-    ;(map #(if (fn? %) (% 3) %) 
-        ; (:processed actions)
-    ;     )
+        actions-list
+        (map #(let [tokenized (tokenize %)
+                    ;parsed (parser [(clojure.string/join " " tokenized)])
+                    pos-tagged (pos-tag tokenized)
+                    ;chunked (chunker pos-tagged)
+                    processed (number-characters (into [] (mark-names pos-tagged)))
+                    ]
+                (hash-map
+                  :text %
+                  :tokenized tokenized
+                  ;:parsed parsed
+                  :pos pos-tagged
+                  ;:chunked chunked
+                  :processed processed
+                  ))
+             action-sentences)
+               ]
     actions-list
     ))
 
 
 (pprint
-(make-book) 
+  (make-book) 
 )
 
 
@@ -1110,8 +1239,8 @@ If not matched, output marker instead, and don't consume a-string."
 (defn create-actor [name gender]
   {:name name :gender gender})
 
-(create-actor "Mr. Darcy" :male)
-(create-actor "Elizabeth" :female)
+;(create-actor "Mr. Darcy" :male)
+;(create-actor "Elizabeth" :female)
 
 (defn example-action [actor]
   (apply str 
