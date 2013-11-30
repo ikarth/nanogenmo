@@ -503,6 +503,20 @@ If not matched, output marker instead, and don't consume a-string."
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
+
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Names
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (def example-name-list 
   [{:name "Elizabeth" :gender :feminine}
    {:name "Mr. Darcy" :gender :masculine}
@@ -957,7 +971,10 @@ If not matched, output marker instead, and don't consume a-string."
              source-text)))))
 
 (defn name-census [word]
-  (let [matches (filter #(= word (:word %)) (census-name-list))]
+  (let [matches (filter 
+                  #(re-find (re-pattern (:word %))
+                            word) 
+                  (census-name-list))]
     (if (nil? matches)
       nil
       (:gender (first matches)))))
@@ -971,8 +988,9 @@ If not matched, output marker instead, and don't consume a-string."
     (re-matches #"(He|Him|His|Himself|he|him|his|himself)" word) :masculine
     (re-matches #"(They|Them|Their|Theirs|Themself|Themselves|We|Us|Our|Ourselves|they|them|their|theirs|themself|themselves|we|us|our|ourselves)" word) :group
     (re-matches #"(It|it|Itself|itself)" word) :neuter
-    (re-find #"(Queen|Countess|Duchess|Viscountess|Lady|Dowager|Mrs\.|Mrs |Miss)" word) :feminine
-    (re-find #"(King|Duke|Admiral|Captain|Colonel|Viscount|Hon\.|Lord|Sir|Mr\.|Mr |St\.|Doctor|Dr\.|Dr )" word) :masculine
+    (re-find #"(Baroness|Godess|godess|Queen|Countess|Duchess|Viscountess|Lady|Dowager|Mrs\.|Mrs |Miss)" word) :feminine
+    (re-find #"(Baron|God|god|King|Duke|Admiral|Captain|Colonel|Viscount|Hon\.|Lord|Sir|Mr\.|Mr |St\.|Doctor|Dr\.|Dr )" word) :masculine
+    
     ;(re-find #"(Bennets|Lucases|Harvilles|Gardiners|Collinses|Ibbotsons|Durands|Musgroves)" word) :group
     ;(re-find #"(Elizabeth|Catherine|Charlotte|Caroline|Georgina|Henrietta|Lousia|Penelope|Kitty|Eleanor|Elinor|Lizzy|Lydia|Louisa|Alicia|Maria|Jemima|Sarah|Jane|Anne|Harriet|Mary|Pen|Anna|Anne)" word) :feminine
     ;(re-find #"(Christopher|Edmund|Edward|Walter|Fredrick|Fredric|William|George|James|Harry|Henry|Charles|Basil|Dick|John)" word) :masculine
@@ -1037,6 +1055,9 @@ If not matched, output marker instead, and don't consume a-string."
   (loop [input sentence
          output []
          char-count 0
+         m-count 0
+         f-count 0
+         n-count 0
          last-char nil
          ]
     (if (empty? input)
@@ -1047,10 +1068,22 @@ If not matched, output marker instead, and don't consume a-string."
                  (= (:tag word) "NNP") 
                  false)
             chars (if n? (inc char-count) char-count)
-            output-word (if n? (merge word {:count chars}) word)
+            gender (:gender word)
+            mc (if (= gender :masculine) (inc m-count) m-count)
+            fc (if (= gender :feminine) (inc f-count) f-count)
+            nc (if (= gender nil) (inc n-count) n-count)
+            counting (merge {:count chars} 
+                            (cond
+                              (= gender :masculine) {:gender-count mc}
+                              (= gender :feminine) {:gender-count fc}
+                              (= gender nil) {:gender-count nc}
+                              :else {}
+                              )
+                            )
+            output-word (if n? (merge word counting) word)
             cur-char last-char
             ]
-        (recur (rest input) (conj output output-word) chars cur-char)))))
+        (recur (rest input) (conj output output-word) chars mc fc nc cur-char)))))
   
 
 (comment
@@ -1088,17 +1121,48 @@ If not matched, output marker instead, and don't consume a-string."
    ;    :else %)
    ; (:processed sentence)))
 
-(defn make-chapter [] )
-(defn make-scene [] )
-
 (defn make-sentence [action character-list]
-  )
+  (detokenize
+    (map
+      (fn [token]
+        (if (map? token)
+          (cond
+            (:count token) ;output first matching character... 
+            (let [gender (:gender token)
+                  filtered (filter #(= (:gender %) gender) character-list)
+                  chosen-character (nth filtered (- (:gender-count token) 1) (last filtered))]
+              (:word chosen-character))
+            (:word token) (:word token)          
+            :else token)
+          token)) ;ordinary token
+      (:processed action))))
+
+(defn make-paragraph [actions characters]
+  (apply str
+         (clojure.string/join " "
+                (map #(make-sentence % characters) 
+                     (take (+ 1 (rand-int 7)) (shuffle actions))))
+         "\r\n\r\n"))
+
+(defn make-scene [action-list character-list] 
+  "Output a number of paragraphs, based on the actions and characters provided."
+  (let [chars (shuffle character-list)
+        acts (shuffle (take (int (/ (count action-list) 4)) action-list))]; take the first quarter of the actions and shuffle them
+  (take (+ 1 (rand-int 7)) (repeatedly #(make-paragraph acts chars)))))
+
+(defn make-chapter [action-list character-list]
+  (let [acts (shuffle action-list)
+        body-text (take (+ 3 (rand-int 7))
+                        (repeatedly #(make-scene acts character-list)))
+        ]
+    body-text
+    ))
 
 (defn make-book []
   (let [raw-text (slurp "texts\\cleaned\\pnp_excerpt.txt")
         paragraphs (get-data raw-text)
         source-text (flatten (vals (mapcat :categorized paragraphs)))       
-        name-list (distinct (concat (catalog-names-2 source-text) (catalog-names-1 source-text)))
+        character-name-list (map #(hash-map :word % :gender (guess-gender %)) (distinct (concat (catalog-names-1 source-text) (catalog-names-2 source-text))))
         action-sentences (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))
         actions-list
         (map #(let [tokenized (tokenize %)
@@ -1108,22 +1172,22 @@ If not matched, output marker instead, and don't consume a-string."
                     processed (number-characters (into [] (mark-names pos-tagged)))
                     ]
                 (hash-map
-                  :text %
-                  :tokenized tokenized
+                  ;:text %
+                  ;:tokenized tokenized
                   ;:parsed parsed
-                  :pos pos-tagged
+                  ;:pos pos-tagged
                   ;:chunked chunked
                   :processed processed
                   ))
              action-sentences)
                ]
-    actions-list
+    ;(map #(make-sentence % character-name-list) actions-list)
+    (make-chapter actions-list character-name-list)
     ))
 
 
-(pprint
-  (make-book) 
-)
+(spit "texts\\output\\book-test.txt"
+  (apply str (flatten (make-book))))
 
 
 
