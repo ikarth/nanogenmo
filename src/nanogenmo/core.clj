@@ -55,11 +55,6 @@
 (chunk-filter-2 fixed-noun-phrases #"^NP$")
 ;;;
 
-(defn -main
-  "I don't do a whole lot ... yet."
-  [& args]
-  (println "Hello, World!"))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
 ;;; Input
@@ -141,6 +136,9 @@
 (defn categorize-paragraph [source-text]
   "Returns a category based on the contents of the source-text: dialog, action, or exposition."
   (cond
+    (re-find #"^[.*]$" source-text) :annotation
+    (re-find #"^CHAPTER" source-text) :annotation
+    (= (clojure.string/upper-case source-text) source-text) :annotation
     (re-find #"\"" source-text) :dialogue
     (re-find #",$" source-text) :ends-with-comma ;only last sentence is dialogue
     :else :action))
@@ -503,7 +501,13 @@ If not matched, output marker instead, and don't consume a-string."
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn process-for-analysis [sentence]
+  "Take an action sentence and clean it up to be analyzed."
+  )
 
+(defn count-words [string]
+  "given a string, count the number of occurances of each word."
+  )
 
 
 
@@ -883,7 +887,6 @@ If not matched, output marker instead, and don't consume a-string."
     ))
 
 
-
 (defn output-gutenberg-shuffle []
 (spit "texts\\output\\gutenberg-shuffle.txt"
       (apply str 
@@ -1114,6 +1117,10 @@ If not matched, output marker instead, and don't consume a-string."
        (recur (rest input) (conj output output-word) c-list current-char)))))
 )
     
+
+(defn longest-word [text]
+  (last (sort-by count (tokenize (apply str text)))))
+
 ;(defn insert-characters [sentence char-list]
 ;(map
 ; #(cond
@@ -1146,20 +1153,30 @@ If not matched, output marker instead, and don't consume a-string."
 
 (defn make-scene [action-list character-list] 
   "Output a number of paragraphs, based on the actions and characters provided."
-  (let [chars (shuffle character-list)
-        acts (shuffle (take (int (/ (count action-list) 4)) action-list))]; take the first quarter of the actions and shuffle them
-  (take (+ 1 (rand-int 7)) (repeatedly #(make-paragraph acts chars)))))
+  (apply str
+         (let [chars (shuffle character-list)
+               acts (shuffle (take (int (/ (count action-list) 4)) action-list))]; take the first quarter of the actions and shuffle them
+           (take (+ 1 (rand-int 7)) (repeatedly #(make-paragraph acts chars))))))
 
-(defn make-chapter [action-list character-list]
+(defn make-chapter [action-list character-list chapter-number]
+  (apply str
   (let [acts (shuffle action-list)
         body-text (take (+ 3 (rand-int 7))
                         (repeatedly #(make-scene acts character-list)))
+        chapter-name (longest-word body-text)
         ]
-    body-text
-    ))
+    (clojure.string/join ["\r\n##CHAPTER " chapter-number ": " (clojure.string/upper-case chapter-name) "\r\n\r\n" (apply str body-text) "\r\n\r\n"])
+    )))
 
-(defn make-book []
-  (let [raw-text (slurp "texts\\cleaned\\pnp_excerpt.txt")
+(defn write-book [action-list character-list]
+  (apply str
+         (loop [itr 1 output []]
+           (if (> itr 26)
+             output
+             (recur (inc itr) (concat output (make-chapter action-list character-list itr)) )))))
+
+(defn make-book [raw-source-text]
+  (let [raw-text raw-source-text;(slurp "texts\\cleaned\\pnp_excerpt.txt")
         paragraphs (get-data raw-text)
         source-text (flatten (vals (mapcat :categorized paragraphs)))       
         character-name-list (map #(hash-map :word % :gender (guess-gender %)) (distinct (concat (catalog-names-1 source-text) (catalog-names-2 source-text))))
@@ -1180,25 +1197,75 @@ If not matched, output marker instead, and don't consume a-string."
                   :processed processed
                   ))
              action-sentences)
+        body-text (write-book actions-list character-name-list)
+        book-title (longest-word body-text)
                ]
     ;(map #(make-sentence % character-name-list) actions-list)
-    (make-chapter actions-list character-name-list)
+    ;body-text
+    (clojure.string/join ["#" (clojure.string/upper-case book-title) ": A Novel\r\n\r\n"
+                          (apply str body-text)
+                          "\r\n\r\n"])
+                          
+    ;(clojure.string/join ["\r\n##CHAPTER " 1 "\r\n\r\n" 
+    ;(make-chapter actions-list character-name-list 1)
     ))
 
 
-(spit "texts\\output\\book-test.txt"
-  (apply str (flatten (make-book))))
+;(spit "texts\\output\\book-test.txt"
+;  (apply str (make-book (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
+
+(defn novel-source-list []
+  ["texts\\cleaned\\pg42671_clean.txt"
+   "texts\\cleaned\\pg142.txt"
+   "texts\\cleaned\\pg41667.txt"
+   "texts\\cleaned\\pg1400.txt"
+   "texts\\cleaned\\pg98.txt"
+   "texts\\cleaned\\pg768.txt"
+   "texts\\cleaned\\pg2591.txt"
+   "texts\\cleaned\\pg2776.txt"
+   "texts\\cleaned\\pg215.txt"
+   "texts\\cleaned\\pg910.txt"
+   "texts\\cleaned\\pg13821.txt"
+   "texts\\cleaned\\pg8183.txt"
+   "texts\\cleaned\\pg5713.txt"
+   "texts\\cleaned\\pg10806.txt"
+   "texts\\cleaned\\pg7838.txt"
+   "texts\\cleaned\\pg7477.txt"
+   "texts\\cleaned\\pg13820.txt"
+   "texts\\cleaned\\gutenberg\\austen-emma.txt"
+   "texts\\cleaned\\gutenberg\\austen-persuasion.txt"
+   "texts\\cleaned\\gutenberg\\austen-sense.txt"
+   "texts\\cleaned\\gutenberg\\burgess-busterbrown.txt"
+   "texts\\cleaned\\gutenberg\\chesterton-brown.txt"
+   "texts\\cleaned\\gutenberg\\chesterton-thursday.txt"
+   "texts\\cleaned\\gutenberg\\melville-moby_dick.txt"
+   "texts\\cleaned\\pg2600.txt"
+   "texts\\cleaned\\pg62.txt"
+   "texts\\cleaned\\pg45.txt"
+   "texts\\cleaned\\pg730.txt"
+   ])
+
+(defn input-source-text []
+  (apply str
+         (map slurp (novel-source-list))))
+
+(defn make-novel []
+  (spit "texts\\output\\novel.markdown"
+        (apply str (make-book (input-source-text)))))
+
+;(make-novel)
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Main
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-
-
-
-
-
-
-
-
+(defn -main
+  "I don't do a whole lot ... yet."
+  [& args]
+  (make-novel))
 
 
 
