@@ -1004,8 +1004,8 @@ If not matched, output marker instead, and don't consume a-string."
     (re-matches #"(He|Him|His|Himself|he|him|his|himself)" word) :masculine
     (re-matches #"(They|Them|Their|Theirs|Themself|Themselves|We|Us|Our|Ourselves|they|them|their|theirs|themself|themselves|we|us|our|ourselves)" word) :group
     (re-matches #"(It|it|Itself|itself)" word) :neuter
-    (re-find #"(Baroness|Godess|godess|Queen|Countess|Duchess|Viscountess|Lady|Dowager|Mrs\.|Mrs |Miss)" word) :feminine
-    (re-find #"(Baron|God|god|King|Duke|Admiral|Captain|Colonel|Viscount|Hon\.|Lord|Sir|Mr\.|Mr |St\.|Doctor|Dr\.|Dr )" word) :masculine
+    (re-find #"(Princess|Baroness|Godess|godess|Queen|Countess|Duchess|Viscountess|Lady|Dowager|Mrs\.|Mrs |Miss)" word) :feminine
+    (re-find #"(Prince|Knight|Baron|God|god|King|Duke|Admiral|Captain|Colonel|Viscount|Count|Hon\.|Lord|Sir|Mr\.|Mr |St\.|Doctor|Dr\.|Dr )" word) :masculine
     
     ;(re-find #"(Bennets|Lucases|Harvilles|Gardiners|Collinses|Ibbotsons|Durands|Musgroves)" word) :group
     ;(re-find #"(Elizabeth|Catherine|Charlotte|Caroline|Georgina|Henrietta|Lousia|Penelope|Kitty|Eleanor|Elinor|Lizzy|Lydia|Louisa|Alicia|Maria|Jemima|Sarah|Jane|Anne|Harriet|Mary|Pen|Anna|Anne)" word) :feminine
@@ -1241,11 +1241,11 @@ If not matched, output marker instead, and don't consume a-string."
   (let [raw-text raw-source-text;(slurp "texts\\cleaned\\pnp_excerpt.txt")
         paragraphs (time (get-data raw-text))
         source-text (flatten (vals (mapcat :categorized paragraphs)))       
-        character-name-list (time (print-debug "Characters" (remove nil? (map #(hash-map :word % :gender (guess-gender %)) 
-                                                                              (distinct (concat 
-                                                                                          (catalog-names-1 source-text) 
-                                                                                          (catalog-names-2 source-text)))))))
-        print-names (pprint character-name-list)
+        character-name-list (time (print-debug "Characters" (remove #(= (clojure.string/upper-case (:word %)) (:word %) ) (remove nil? (map #(hash-map :word % :gender (guess-gender %)) 
+                                                                                                                                 (distinct (concat 
+                                                                                                                                             (catalog-names-1 source-text) 
+                                                                                                                                             (catalog-names-2 source-text))))))))
+        ;print-names (pprint character-name-list)
         action-sentences (time (print-debug "Actions" (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))))
         actions-list
         (time  
@@ -1267,7 +1267,7 @@ If not matched, output marker instead, and don't consume a-string."
                           pos-tagged;processed
                           ))
                    action-sentences))
-        body-text (write-book actions-list character-name-list)
+        body-text (write-book actions-list (take (int (/ (count character-name-list) 8)) (shuffle character-name-list)))
         book-title (str (longest-word body-text)); (random-character character-name-list) (random-word body-text))
                ]
     (clojure.string/join ["#" (clojure.string/upper-case book-title) ": A Novel\r\n\r\n"
@@ -1284,33 +1284,33 @@ If not matched, output marker instead, and don't consume a-string."
 (defn novel-source-list []
   [;"texts\\cleaned\\pnp_excerpt.txt"
    "texts\\cleaned\\pg42671_clean.txt"
-  ; "texts\\cleaned\\pg142.txt"
-  ;"texts\\cleaned\\pg41667.txt"
-  ; "texts\\cleaned\\pg1400.txt"
-  ; "texts\\cleaned\\pg98.txt"
-  ; "texts\\cleaned\\pg768.txt"
-  ; "texts\\cleaned\\pg2591.txt"
-  ; "texts\\cleaned\\pg2776.txt"
-  ; "texts\\cleaned\\pg215.txt"
-  ; "texts\\cleaned\\pg910.txt"
-  ; "texts\\cleaned\\pg13821.txt"
-  ; "texts\\cleaned\\pg8183.txt"
-  ; "texts\\cleaned\\pg5713.txt"
-  ; "texts\\cleaned\\pg10806.txt"
-  ; "texts\\cleaned\\pg7838.txt"
-  ; "texts\\cleaned\\pg7477.txt"
-  ; "texts\\cleaned\\pg13820.txt"
-  ; "texts\\cleaned\\gutenberg\\austen-emma.txt"
-  ; "texts\\cleaned\\gutenberg\\austen-persuasion.txt"
-  ; "texts\\cleaned\\gutenberg\\austen-sense.txt"
-  ; "texts\\cleaned\\gutenberg\\burgess-busterbrown.txt"
-  ; "texts\\cleaned\\gutenberg\\chesterton-brown.txt"
-  ; "texts\\cleaned\\gutenberg\\chesterton-thursday.txt"
-  ; "texts\\cleaned\\gutenberg\\melville-moby_dick.txt"
-  ; "texts\\cleaned\\pg2600.txt"
-  ; "texts\\cleaned\\pg62.txt"
-  ; "texts\\cleaned\\pg45.txt"
-   ;"texts\\cleaned\\pg730.txt"
+   "texts\\cleaned\\pg142.txt"
+  "texts\\cleaned\\pg41667.txt"
+   "texts\\cleaned\\pg1400.txt"
+   "texts\\cleaned\\pg98.txt"
+   "texts\\cleaned\\pg768.txt"
+   "texts\\cleaned\\pg2591.txt"
+   "texts\\cleaned\\pg2776.txt"
+   "texts\\cleaned\\pg215.txt"
+   "texts\\cleaned\\pg910.txt"
+   "texts\\cleaned\\pg13821.txt"
+   "texts\\cleaned\\pg8183.txt"
+   "texts\\cleaned\\pg5713.txt"
+   "texts\\cleaned\\pg10806.txt"
+   "texts\\cleaned\\pg7838.txt"
+   "texts\\cleaned\\pg7477.txt"
+   "texts\\cleaned\\pg13820.txt"
+   "texts\\cleaned\\gutenberg\\austen-emma.txt"
+   "texts\\cleaned\\gutenberg\\austen-persuasion.txt"
+   "texts\\cleaned\\gutenberg\\austen-sense.txt"
+   "texts\\cleaned\\gutenberg\\burgess-busterbrown.txt"
+   "texts\\cleaned\\gutenberg\\chesterton-brown.txt"
+   "texts\\cleaned\\gutenberg\\chesterton-thursday.txt"
+   "texts\\cleaned\\gutenberg\\melville-moby_dick.txt"
+   "texts\\cleaned\\pg2600.txt"
+   "texts\\cleaned\\pg62.txt"
+   "texts\\cleaned\\pg45.txt"
+  "texts\\cleaned\\pg730.txt"
    ])
 
 (defn input-source-text []
