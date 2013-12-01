@@ -615,12 +615,21 @@ If not matched, output marker instead, and don't consume a-string."
 (pos-filter names-filter #"(NNP|PRP)")
 
 (defn catalog-names-1 [source-text]
-  (let [text (map #(-> % tokenize pos-tag) source-text)]
+  (let [text (map (fn [x] 
+                                  ;{:pre [(string? x)]}
+                                  (if (string? x)
+                                    (-> x tokenize pos-tag)
+                                    (print "name error:" x)
+                                    )) 
+                                
+                  source-text)]
+    
     (distinct
         (mapcat find-chars text))))
 
 (defn catalog-names-2 [source-text]
-  (let [text (map #(-> % tokenize name-find) source-text)]
+  (let [text (map (fn [x] (if (string? x)
+                            (-> x tokenize name-find))) source-text)]
     (distinct
       (mapcat concat
               (remove #(empty? %)
@@ -966,6 +975,10 @@ If not matched, output marker instead, and don't consume a-string."
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn print-debug [text body]
+  (pprint text)
+  body)
+
 (defn get-data [source-text]
   (paragraph-to-typed-sentences
     (categorize-text 
@@ -978,8 +991,8 @@ If not matched, output marker instead, and don't consume a-string."
                   #(re-find (re-pattern (:word %))
                             word) 
                   (census-name-list))]
-    (if (nil? matches)
-      nil
+    (if (or (empty? matches) (nil? matches))
+      :unknown
       (:gender (first matches)))))
 
 (defn guess-gender [word]
@@ -1006,35 +1019,39 @@ If not matched, output marker instead, and don't consume a-string."
     g2
     (if (nil? g2)
       g1
-      g1)))
+      (if (= :unknown g1)
+        g2
+        g1))))
 
 (defn token-is-name? [token]
   :doc "Takes a POS-tagged token and returns true is the token is probably a name."
   (cond
-    (re-matches #"(NNP|NNPS)" (:tag token)) true
-    (re-matches #"(PRP|PRP\$)" (:tag token)) true
+    (re-matches #"(NNP)" (:tag token)) true
+    ;(re-matches #"(PRP|PRP\$)" (:tag token)) true
     :else false))
 
 (defn combine-name-vectors [tokenized-sentence]
- (reduce #(cond
-      (and (map? %1) (map? %2))
-      (flatten (concat [(merge %1 
-                               (merge %2 
-                                      {:gender (merge-gender (:gender %1) (:gender %2))
-                                       :word 
-                                       (clojure.string/join " " [(:word %1)
-                                                                 (:word %2)])}) )]))      
-      (and (map? (last %1)) (map? %2))
-      (flatten (concat [(butlast %1) 
-                        (merge (last %1) 
-                               (merge %2 
-                                      {:gender (merge-gender (:gender (last %1)) (:gender %2))
-                                       :word 
-                                       (clojure.string/join " " [(:word (last %1))
-                                                                 (:word %2)])}) )]))
-      :else (flatten (concat [%1 %2]))
-      )
-   tokenized-sentence))
+  (let [combined 
+        (reduce #(cond
+                   (and (map? %1) (map? %2))
+                   (flatten (concat [(merge %1 
+                                            (merge %2 
+                                                   {:gender (merge-gender (:gender %1) (:gender %2))
+                                                    :word 
+                                                    (clojure.string/join " " [(:word %1)
+                                                                              (:word %2)])}) )]))      
+                   (and (map? (last %1)) (map? %2))
+                   (flatten (concat [(butlast %1) 
+                                     (merge (last %1) 
+                                            (merge %2 
+                                                   {:gender (merge-gender (:gender (last %1)) (:gender %2))
+                                                    :word 
+                                                    (clojure.string/join " " [(:word (last %1))
+                                                                              (:word %2)])}) )]))
+                   :else (flatten (concat [%1 %2]))
+                   )
+                tokenized-sentence)]
+    (remove nil? combined)))
 
 (defn mark-names [tokenized-sentence]
   "Take a pos-tagged, tokenized sentence, and return it with the names replaced with functions."
@@ -1072,17 +1089,15 @@ If not matched, output marker instead, and don't consume a-string."
                  false)
             chars (if n? (inc char-count) char-count)
             gender (:gender word)
-            mc (if (= gender :masculine) (inc m-count) m-count)
-            fc (if (= gender :feminine) (inc f-count) f-count)
-            nc (if (= gender nil) (inc n-count) n-count)
             counting (merge {:count chars} 
                             (cond
-                              (= gender :masculine) {:gender-count mc}
-                              (= gender :feminine) {:gender-count fc}
-                              (= gender nil) {:gender-count nc}
-                              :else {}
-                              )
-                            )
+                              (= gender :masculine) {:gender-count m-count}
+                              (= gender :feminine) {:gender-count f-count}
+                              (= gender :unknown) {:gender-count n-count}
+                              :else {}))
+            mc (if (= gender :masculine) (inc m-count) m-count)
+            fc (if (= gender :feminine) (inc f-count) f-count)
+            nc (if (= gender :unknown) (inc n-count) n-count)
             output-word (if n? (merge word counting) word)
             cur-char last-char
             ]
@@ -1116,10 +1131,19 @@ If not matched, output marker instead, and don't consume a-string."
            ]
        (recur (rest input) (conj output output-word) c-list current-char)))))
 )
-    
+
+(defn random-character [characters]
+  (apply str (:word (first (shuffle (characters))))))
+
+;(defn random-word [text]
+;  (time
+;    ;  (last (sort-by count (clojure.string/split (apply str text) #" ")))))
+;     (last (shuffle (tokenize (apply str text))))))
 
 (defn longest-word [text]
-  (last (sort-by count (tokenize (apply str text)))))
+  (time
+    ;  (last (sort-by count (clojure.string/split (apply str text) #" ")))))
+     (last (sort-by count (tokenize (apply str text))))))
 
 ;(defn insert-characters [sentence char-list]
 ;(map
@@ -1129,20 +1153,50 @@ If not matched, output marker instead, and don't consume a-string."
    ; (:processed sentence)))
 
 (defn make-sentence [action character-list]
-  (detokenize
-    (map
-      (fn [token]
-        (if (map? token)
-          (cond
-            (:count token) ;output first matching character... 
-            (let [gender (:gender token)
-                  filtered (filter #(= (:gender %) gender) character-list)
-                  chosen-character (nth filtered (- (:gender-count token) 1) (last filtered))]
-              (:word chosen-character))
-            (:word token) (:word token)          
-            :else token)
-          token)) ;ordinary token
-      (:processed action))))
+  (let [processed-action action        
+        new-sentence
+        (map
+          (fn [token]
+            (str
+              (cond
+                (string? token) token
+                (map? token) (str 
+                               (if (nil? (:word token)) 
+                                 "ERROR: nil" 
+                                 (if (or (nil? (:count token)) (nil? (:gender token)) (nil? (:gender-count token)))
+                                   (str "ERROR: count <" token ">")
+                                   (let [gender (:gender token)
+                                         filtered (filter #(= (:gender %) gender) character-list)
+                                         chosen-character (nth filtered 
+                                                               (:gender-count token)
+                                                               (str "ERROR: " filtered " - " {:word (str (:gender token))}))
+                                         ]
+                                     (if (:word chosen-character)
+                                       (str (:word chosen-character))
+                                       (str chosen-character));[(:gender token) (:gender-count token)])
+                                         )
+                                   )))
+                :else (str "ERROR: <" token ">"))
+              ))
+              ;(if (map? token)
+              ;  (str token)
+                ;(cond
+                ;  (:count token) ;output first matching character... 
+                ;  (let [gender (:gender token)
+                ;        filtered (filter #(= (:gender %) gender) character-list)
+                ;        chosen-character (nth filtered (:gender-count token) {:word (str (:gender token))})]
+                ;    (:word chosen-character))
+                ;  (:word token) (:word token)          
+                ;  :else token)
+               ; token))) ;ordinary token
+         processed-action)
+        ;(map str action)
+          ]
+    ;(pprint new-sentence)
+    (if (every? string? new-sentence)
+      (detokenize new-sentence)
+      (pprint "ERROR:" new-sentence))
+      ))
 
 (defn make-paragraph [actions characters]
   (apply str
@@ -1153,96 +1207,109 @@ If not matched, output marker instead, and don't consume a-string."
 
 (defn make-scene [action-list character-list] 
   "Output a number of paragraphs, based on the actions and characters provided."
+  (time
   (apply str
          (let [chars (shuffle character-list)
-               acts (shuffle (take (int (/ (count action-list) 4)) action-list))]; take the first quarter of the actions and shuffle them
-           (take (+ 1 (rand-int 7)) (repeatedly #(make-paragraph acts chars))))))
+               acts (take (int (/ (count action-list) 4)) action-list)]; take the first quarter of the actions and shuffle them
+           (take (+ 1 (rand-int 7)) (repeatedly #(make-paragraph acts chars)))))))
 
 (defn make-chapter [action-list character-list chapter-number]
+  (time
   (apply str
-  (let [acts (shuffle action-list)
+  (let [acts (shuffle (take (int (/ (count action-list) 4)) action-list))
         body-text (take (+ 3 (rand-int 7))
                         (repeatedly #(make-scene acts character-list)))
         chapter-name (longest-word body-text)
         ]
+    (print "Wrote Chapter " chapter-number ": " chapter-name "\n")
     (clojure.string/join ["\r\n##CHAPTER " chapter-number ": " (clojure.string/upper-case chapter-name) "\r\n\r\n" (apply str body-text) "\r\n\r\n"])
-    )))
+    ))))
 
 (defn write-book [action-list character-list]
   (apply str
          (loop [itr 1 output []]
            (if (> itr 26)
              output
-             (recur (inc itr) (concat output (make-chapter action-list character-list itr)) )))))
+             (recur (inc itr) (concat output (make-chapter (shuffle action-list) character-list itr)) )))))
+
+(defn strip-nils [sentences]
+  (remove nil? sentences)
+  )
 
 (defn make-book [raw-source-text]
   (let [raw-text raw-source-text;(slurp "texts\\cleaned\\pnp_excerpt.txt")
-        paragraphs (get-data raw-text)
+        paragraphs (time (get-data raw-text))
         source-text (flatten (vals (mapcat :categorized paragraphs)))       
-        character-name-list (map #(hash-map :word % :gender (guess-gender %)) (distinct (concat (catalog-names-1 source-text) (catalog-names-2 source-text))))
-        action-sentences (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))
+        character-name-list (time (print-debug "Characters" (remove nil? (map #(hash-map :word % :gender (guess-gender %)) 
+                                                                              (distinct (concat 
+                                                                                          (catalog-names-1 source-text) 
+                                                                                          (catalog-names-2 source-text)))))))
+        print-names (pprint character-name-list)
+        action-sentences (time (print-debug "Actions" (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))))
         actions-list
-        (map #(let [tokenized (tokenize %)
-                    ;parsed (parser [(clojure.string/join " " tokenized)])
-                    pos-tagged (pos-tag tokenized)
-                    ;chunked (chunker pos-tagged)
-                    processed (number-characters (into [] (mark-names pos-tagged)))
-                    ]
-                (hash-map
-                  ;:text %
-                  ;:tokenized tokenized
-                  ;:parsed parsed
-                  ;:pos pos-tagged
-                  ;:chunked chunked
-                  :processed processed
-                  ))
-             action-sentences)
+        (time  
+              (pmap (fn [sen]
+                      {:pre [(string? sen)]}
+                      (let [tokenized (tokenize sen)
+                            ;parsed (parser [(clojure.string/join " " tokenized)])
+                            pos-tagged (pos-tag tokenized)
+                            ;chunked (chunker pos-tagged)
+                            processed (number-characters (into [] (mark-names pos-tagged)))
+                            ]
+                        (print ".")
+                        ;(hash-map
+                          ;:text %
+                          ;:tokenized tokenized
+                          ;:parsed parsed
+                          ;:pos pos-tagged
+                          ;:chunked chunked
+                          processed
+                          ))
+                   action-sentences))
         body-text (write-book actions-list character-name-list)
-        book-title (longest-word body-text)
+        book-title (str (longest-word body-text)); (random-character character-name-list) (random-word body-text))
                ]
-    ;(map #(make-sentence % character-name-list) actions-list)
-    ;body-text
     (clojure.string/join ["#" (clojure.string/upper-case book-title) ": A Novel\r\n\r\n"
                           (apply str body-text)
                           "\r\n\r\n"])
-                          
-    ;(clojure.string/join ["\r\n##CHAPTER " 1 "\r\n\r\n" 
-    ;(make-chapter actions-list character-name-list 1)
+    ;    (pprint source-text)                  
     ))
 
 
-;(spit "texts\\output\\book-test.txt"
-;  (apply str (make-book (slurp "texts\\cleaned\\pnp_excerpt.txt"))))
+;(time 
+;(spit "texts\\output\\book-test-2.txt"
+;  (apply str (make-book (slurp "texts\\cleaned\\pnp_excerpt.txt")))))
 
 (defn novel-source-list []
-  ["texts\\cleaned\\pg42671_clean.txt"
-   "texts\\cleaned\\pg142.txt"
-   "texts\\cleaned\\pg41667.txt"
-   "texts\\cleaned\\pg1400.txt"
-   "texts\\cleaned\\pg98.txt"
-   "texts\\cleaned\\pg768.txt"
-   "texts\\cleaned\\pg2591.txt"
-   "texts\\cleaned\\pg2776.txt"
-   "texts\\cleaned\\pg215.txt"
-   "texts\\cleaned\\pg910.txt"
-   "texts\\cleaned\\pg13821.txt"
-   "texts\\cleaned\\pg8183.txt"
-   "texts\\cleaned\\pg5713.txt"
-   "texts\\cleaned\\pg10806.txt"
-   "texts\\cleaned\\pg7838.txt"
-   "texts\\cleaned\\pg7477.txt"
-   "texts\\cleaned\\pg13820.txt"
-   "texts\\cleaned\\gutenberg\\austen-emma.txt"
-   "texts\\cleaned\\gutenberg\\austen-persuasion.txt"
-   "texts\\cleaned\\gutenberg\\austen-sense.txt"
-   "texts\\cleaned\\gutenberg\\burgess-busterbrown.txt"
-   "texts\\cleaned\\gutenberg\\chesterton-brown.txt"
-   "texts\\cleaned\\gutenberg\\chesterton-thursday.txt"
-   "texts\\cleaned\\gutenberg\\melville-moby_dick.txt"
-   "texts\\cleaned\\pg2600.txt"
-   "texts\\cleaned\\pg62.txt"
-   "texts\\cleaned\\pg45.txt"
-   "texts\\cleaned\\pg730.txt"
+  [;"texts\\cleaned\\pnp_excerpt.txt"
+   "texts\\cleaned\\pg42671_clean.txt"
+  ; "texts\\cleaned\\pg142.txt"
+  ;"texts\\cleaned\\pg41667.txt"
+  ; "texts\\cleaned\\pg1400.txt"
+  ; "texts\\cleaned\\pg98.txt"
+  ; "texts\\cleaned\\pg768.txt"
+  ; "texts\\cleaned\\pg2591.txt"
+  ; "texts\\cleaned\\pg2776.txt"
+  ; "texts\\cleaned\\pg215.txt"
+  ; "texts\\cleaned\\pg910.txt"
+  ; "texts\\cleaned\\pg13821.txt"
+  ; "texts\\cleaned\\pg8183.txt"
+  ; "texts\\cleaned\\pg5713.txt"
+  ; "texts\\cleaned\\pg10806.txt"
+  ; "texts\\cleaned\\pg7838.txt"
+  ; "texts\\cleaned\\pg7477.txt"
+  ; "texts\\cleaned\\pg13820.txt"
+  ; "texts\\cleaned\\gutenberg\\austen-emma.txt"
+  ; "texts\\cleaned\\gutenberg\\austen-persuasion.txt"
+  ; "texts\\cleaned\\gutenberg\\austen-sense.txt"
+  ; "texts\\cleaned\\gutenberg\\burgess-busterbrown.txt"
+  ; "texts\\cleaned\\gutenberg\\chesterton-brown.txt"
+  ; "texts\\cleaned\\gutenberg\\chesterton-thursday.txt"
+  ; "texts\\cleaned\\gutenberg\\melville-moby_dick.txt"
+  ; "texts\\cleaned\\pg2600.txt"
+  ; "texts\\cleaned\\pg62.txt"
+  ; "texts\\cleaned\\pg45.txt"
+   ;"texts\\cleaned\\pg730.txt"
    ])
 
 (defn input-source-text []
@@ -1250,10 +1317,12 @@ If not matched, output marker instead, and don't consume a-string."
          (map slurp (novel-source-list))))
 
 (defn make-novel []
-  (spit "texts\\output\\novel.markdown"
-        (apply str (make-book (input-source-text)))))
+  (time
+    (spit "texts\\output\\novel.markdown"
+          (apply str (make-book (input-source-text)))))
+  (print "\nDone\n"))
 
-;(make-novel)
+(make-novel)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
