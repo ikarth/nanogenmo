@@ -1153,7 +1153,7 @@ If not matched, output marker instead, and don't consume a-string."
    ; (:processed sentence)))
 
 (defn make-sentence [action character-list]
-  (let [processed-action action        
+  (let [processed-action (number-characters (into [] (mark-names action)))        
         new-sentence
         (map
           (fn [token]
@@ -1217,8 +1217,9 @@ If not matched, output marker instead, and don't consume a-string."
   (time
   (apply str
   (let [acts (shuffle (take (int (/ (count action-list) 4)) action-list))
-        body-text (take (+ 3 (rand-int 7))
-                        (repeatedly #(make-scene acts character-list)))
+        body-text (pmap (fn [_] (make-scene acts character-list)) (range (+ 3 (rand-int 7))))  
+        ;(take (+ 3 (rand-int 7))
+                  ;      (repeatedly #(make-scene acts character-list)))
         chapter-name (longest-word body-text)
         ]
     (print "Wrote Chapter " chapter-number ": " chapter-name "\n")
@@ -1254,7 +1255,7 @@ If not matched, output marker instead, and don't consume a-string."
                             ;parsed (parser [(clojure.string/join " " tokenized)])
                             pos-tagged (pos-tag tokenized)
                             ;chunked (chunker pos-tagged)
-                            processed (number-characters (into [] (mark-names pos-tagged)))
+                            ;processed (number-characters (into [] (mark-names pos-tagged)))
                             ]
                         (print ".")
                         ;(hash-map
@@ -1263,7 +1264,7 @@ If not matched, output marker instead, and don't consume a-string."
                           ;:parsed parsed
                           ;:pos pos-tagged
                           ;:chunked chunked
-                          processed
+                          pos-tagged;processed
                           ))
                    action-sentences))
         body-text (write-book actions-list character-name-list)
