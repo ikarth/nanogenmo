@@ -14,6 +14,7 @@ So far, results include:
 
 ###Version 0.1 Novels:
 [POMERANIAN-HAMBLETONIAN-RED-IRISH-COCHIN-CHINA-STOKE-POGIS: A Novel] (https://github.com/ikarth/nanogenmo/blob/master/texts/output/POMERANIAN-HAMBLETONIAN-RED-IRISH-COCHIN-CHINA-STOKE-POGIS%20A%20Novel.markdown)
+
 [SCROFULOUS-LOOKING: A Novel] (https://github.com/ikarth/nanogenmo/blob/master/texts/output/SCROFULOUS-LOOKING%20A%20Novel.markdown)
 
 ## Installation
