@@ -2,6 +2,8 @@
 
 National Novel Generation Month Project 2013 
 
+[NaNoGenMo] (https://github.com/dariusk/NaNoGenMo): It started as a joke on twitter by Darius Kazemi and grew into an entire month of people creating novel-writing generators. This one is mine.
+
 ## Results
 
 So far, results include:
