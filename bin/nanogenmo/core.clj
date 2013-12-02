@@ -138,9 +138,13 @@
   (cond
     (re-find #"^[.*]$" source-text) :annotation
     (re-find #"^CHAPTER" source-text) :annotation
+    (re-find #"^PART " source-text) :annotation
+    (re-find #"^Chapter" source-text) :annotation ;Anne of Green Gables doesn't all-caps chapoter titles. 
     (= (clojure.string/upper-case source-text) source-text) :annotation
     (re-find #"\"" source-text) :dialogue
+    (or (re-find #"^\'" source-text) (re-find #" \'" source-text) ) :dialogue ;british single-quote dialogue
     (re-find #",$" source-text) :ends-with-comma ;only last sentence is dialogue
+    (re-find #"--$" source-text) :ends-with-comma ;well, technically it's ends-with-dash...
     :else :action))
 
 (defn input-source-text-directly [source-text]
@@ -1152,8 +1156,13 @@ If not matched, output marker instead, and don't consume a-string."
    ;    :else %)
    ; (:processed sentence)))
 
+(defn process-sentence-to-action [sentence]
+  (number-characters (into [] (mark-names (pos-tag (tokenize sentence))))))
+
+(def process-sentence-to-action-memo (memoize process-sentence-to-action))
+   
 (defn make-sentence [action character-list]
-  (let [processed-action (number-characters (into [] (mark-names action)))        
+  (let [processed-action (process-sentence-to-action action)        
         new-sentence
         (map
           (fn [token]
@@ -1251,9 +1260,9 @@ If not matched, output marker instead, and don't consume a-string."
         (time  
               (pmap (fn [sen]
                       {:pre [(string? sen)]}
-                      (let [tokenized (tokenize sen)
+                      (let [;tokenized (tokenize sen)
                             ;parsed (parser [(clojure.string/join " " tokenized)])
-                            pos-tagged (pos-tag tokenized)
+                            ;pos-tagged (pos-tag tokenized)
                             ;chunked (chunker pos-tagged)
                             ;processed (number-characters (into [] (mark-names pos-tagged)))
                             ]
@@ -1264,7 +1273,8 @@ If not matched, output marker instead, and don't consume a-string."
                           ;:parsed parsed
                           ;:pos pos-tagged
                           ;:chunked chunked
-                          pos-tagged;processed
+                          ;pos-tagged;processed
+                          sen
                           ))
                    action-sentences))
         body-text (write-book actions-list (take (int (/ (count character-name-list) 8)) (shuffle character-name-list)))
