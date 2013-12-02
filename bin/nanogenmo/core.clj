@@ -1162,7 +1162,7 @@ If not matched, output marker instead, and don't consume a-string."
 (def process-sentence-to-action-memo (memoize process-sentence-to-action))
    
 (defn make-sentence [action character-list]
-  (let [processed-action (process-sentence-to-action action)        
+  (let [processed-action (process-sentence-to-action-memo action)        
         new-sentence
         (map
           (fn [token]
