@@ -65,76 +65,90 @@
 
 (def ^:dynamic *windows-linebreaks* true)
 
-(defn strip-italics [text]
+(defn strip-italics 
   "Removes _underscored italics_ from the text. It'd be nice to find a way to include these, later."
+  [text]
   (clojure.string/replace text "_" ""))
 
-(defn truncate-whitespace [text]
+(defn truncate-whitespace
   "Removes excess spaces from the text, regularizing lines. Not what you want when you're trying to preserve the format of poetry, but definitely what you want when you're trying to parse the words."
+   [text]
   (clojure.string/replace text #"\s+" " "))
 
-(defn strip-linebreaks-windows [text]
+(defn strip-linebreaks-windows
   "Returns string with linebreaks stripped out."
+   [text]
    (clojure.string/replace 
      (clojure.string/replace text #"[\r\n]+" "_@_")
      "_@_" " "))
 
-(defn strip-linebreaks-unix [text]
+(defn strip-linebreaks-unix
   "Returns string with linebreaks stripped out."
+   [text]
    (clojure.string/replace 
      (clojure.string/replace text #"[\n]+" "_@_")
      "_@_" " "))
 
-(defn strip-linebreaks [text]
+(defn strip-linebreaks
   "Returns string with linebreaks stripped out."
+   [text]
   (if *windows-linebreaks*
     (strip-linebreaks-windows text)
     (strip-linebreaks-unix text)))
 
-(defn mark-paragraphs-windows [source-text]
+(defn mark-paragraphs-windows
   "Find the linebreaks and mark their position for later splitting. May need updating for non-Windows files."
+   [source-text]
   (clojure.string/replace source-text #"\r\n\r\n" "¶"))
 
-(defn mark-paragraphs-unix [source-text]
+(defn mark-paragraphs-unix
   "Find the linebreaks and mark their position for later splitting. May need updating for non-Windows files."
+   [source-text]
   (clojure.string/replace source-text #"\n\n" "¶"))
 
-(defn mark-paragraphs [text]
+(defn mark-paragraphs
   "Find the linebreaks and mark their position for later splitting."
+   [text]
   (if *windows-linebreaks*
     (mark-paragraphs-windows text)
     (mark-paragraphs-unix text)))
 
-(defn break-on-pilcrow-windows [source-text]
+(defn break-on-pilcrow-windows
   "Find paragraph markers and reinsert the linebreaks."
+   [source-text]
   (clojure.string/replace 
       source-text 
       #"¶" "\r\n\r\n"))
 
-(defn break-on-pilcrow-unix [source-text]
+(defn break-on-pilcrow-unix  
   "Find paragraph markers and reinsert the linebreaks."
+   [source-text]
   (clojure.string/replace 
       source-text 
       #"¶" "\n\n"))
 
-(defn break-on-pilcrow [text]
+(defn break-on-pilcrow 
   "Find paragraph markers and reinsert the linebreaks."
+  [text]
   (if *windows-linebreaks*
     (break-on-pilcrow-windows text)
     (break-on-pilcrow-unix text)))
 
-(defn append-space [source-text]
+(defn append-space 
   "Add a space to the end of the string"
+  [source-text]
   (if-not (nil? (re-find #"¶" source-text))
     (str source-text " ")
     source-text))
 
-(defn get-paragraphs [source-text]
+(defn get-paragraphs 
   "Returns source-texts broken into a list of paragraphs."
+  [source-text]
   (clojure.string/split source-text #"¶"))
 
-(defn categorize-paragraph [source-text]
+(defn categorize-paragraph 
   "Returns a category based on the contents of the source-text: dialog, action, or exposition."
+  [source-text]
   (cond
     (re-find #"^[.*]$" source-text) :annotation
     (re-find #"^CHAPTER" source-text) :annotation
@@ -147,26 +161,30 @@
     (re-find #"--$" source-text) :ends-with-comma ;well, technically it's ends-with-dash...
     :else :action))
 
-(defn input-source-text-directly [source-text]
+(defn input-source-text-directly 
   "Takes cleaned source text and formats it into useful paragraphs."
+  [source-text]
   (get-paragraphs (truncate-whitespace
                     (strip-italics 
                       (strip-linebreaks 
                         (mark-paragraphs 
                           source-text))))))
 
-(defn input-source-text-from-file [filename]
+(defn input-source-text-from-file 
   "Takes cleaned source text and formats it into useful paragraphs."
+  [filename]
   (input-source-text-directly 
     (slurp filename)))
 
-(defn categorize-text [paragraphs]
+(defn categorize-text 
   "Takes a vector of paragraphs and returns a categorized map of paragraphs."
+  [paragraphs]
   (map #(hash-map :category (categorize-paragraph %) :text %)
        paragraphs))
 
-(defn paragraph-to-sentences [paragraph]
+(defn paragraph-to-sentences 
   "Takes paragraph-map-data and assocs the sentence breakdown."
+  [paragraph]
   (assoc paragraph :sentences (get-sentences (:text paragraph))))
 
 ;; A better way to handle the dialog detection: go through the sentences, tracking the quotes 
@@ -174,8 +192,9 @@
 ;; though they are in the same paragraph."
 ;; In the long run, paragraph-level analysis may be less useful than sentence-level filtering.
 
-(defn paragraph-to-typed-sentences [paragraphs]
+(defn paragraph-to-typed-sentences 
   "Takes a paragraph's text and adds categorized sentence breakdowns, to handle the paragraphs that mix action and dialog."
+  [paragraphs]
   (map #(assoc % :categorized 
                (let [sentences (get-sentences (:text %))
                      category (:category %)]
@@ -186,8 +205,9 @@
                                                   :dialogue (last sentences)})))
          paragraphs))
 
-(defn sentences-from-paragraphs [paragraphs]
+(defn sentences-from-paragraphs 
   "Given a collection of paragraphs, grab just the sentences."
+  [paragraphs]
   (mapcat #(:sentences %) paragraphs))
 
 ;(defn grab-sentences-of-type [paragraphs sentence-type]
@@ -199,8 +219,9 @@
 (defn just-categorized-sentences [paragraph category]
   (category (:categorized paragraph)))
 
-(defn append-pilcrow [sentences]
+(defn append-pilcrow 
   "Given a collection of sentences, add a marker to the end of the last one."
+  [sentences]
   (if (not (nil? sentences))
     (if (> (count sentences) 0)
       (vec (conj sentences (str "¶")))
@@ -230,8 +251,9 @@
   #" "))
   
 ;; TODO: add the frequency to the names and sort the list by it...
-(defn census-name-list []
+(defn census-name-list 
   "Returns a lazy-seq containing names derived from US Census."
+  []
   (let [male (map #(hash-map :word % :gender :masculine) 
                     (get-data-file "texts\\names\\male.first.txt"))
         female (map #(hash-map :word % :gender :feminine) 
@@ -250,8 +272,9 @@
 
 (defstruct action :text :tokens)
 
-(defn get-actions [source-text]
+(defn get-actions
   "Take a source text, convert it to paragraphs, and finally output individual sentences as actions."
+   [source-text]
   (map #(struct action %)
        (get-sentences-of-category
          (paragraph-to-typed-sentences
@@ -276,8 +299,9 @@
 (defn tokenize-action [act]
   (assoc act :tokens (tokenize (:text act))))
 
-(defn dechunk [chunked-sentences unchunked-sentences]
+(defn dechunk 
   "Return to the unchunked sentence, with the subsitutions from the chunked sentence."
+  [chunked-sentences unchunked-sentences]
   (mapcat #(:phrase %) chunked-sentences))
 
 (defn process-action [sentence]
@@ -314,8 +338,9 @@
 ;; Named entity: one tokenized sentence per line, names marked.
 ;; Document categorizer: Sentiment word
 
-(defn brute-force-is-name? [token]
+(defn brute-force-is-name? 
   "Returns true if the token is a name."
+  [token]
   (cond
     (re-find #"^(Queen|Countess|Duchess|Viscountess|Lady|Dowager|Mrs.|Mrs|Miss)$" token) true
     (re-find #"^(King|Duke|Admiral|Captain|Colonel|Viscount|Hon.|Lord|Sir|Mr.|Mr|St.|Doctor|Dr.|Dr)$" token) true
@@ -339,11 +364,12 @@
 
 ;(defn merge-name-tags [tokens]
 
-(defn mark-diffs [string]
+(defn mark-diffs 
   "Take two strings.
 Iterate recursively through the longer (t-string) checking for matches.
 If matched, consume and move on to the next one
 If not matched, output marker instead, and don't consume a-string."
+  [string]
   (apply str (loop [t-str (clojure.string/join 
                             " " 
                             (tokenize 
@@ -367,8 +393,9 @@ If not matched, output marker instead, and don't consume a-string."
                            (rest a-str) 
                            (conj c-str t1))))))))
  
-(defn create-token-training-file [source destination]
+(defn create-token-training-file 
   "Load a document, output as one sentence per line."
+  [source destination]
   (spit destination
         (apply str (mapcat #(apply str % "\r\n")
                            (map #(clojure.string/replace % "|" "<SPLIT>")
@@ -377,23 +404,26 @@ If not matched, output marker instead, and don't consume a-string."
                                              (just-get-sentences 
                                                source))))))))
 
-(defn create-paragraph-training-file [source destination]
+(defn create-paragraph-training-file 
   "Load a document, output as one sentence per line."
+  [source destination]
   (spit destination
         (apply str (mapcat #(apply str % "\r\n")
                            (just-get-sentences 
                                source)))))
 
-(defn create-sentence-training-file [source destination]
+(defn create-sentence-training-file
   "Load a document, output as one sentence per line."
+   [source destination]
   (spit destination
         (apply str (mapcat #(apply str % "\r\n")
                            (mapcat #(get-sentences %)
                              (just-get-sentences 
                                source))))))
 
-(defn create-name-training-file [source destination]
+(defn create-name-training-file 
   "Load a document, tokenize it, output as one sentence per line."
+  [source destination]
   (spit destination
         (clojure.string/replace  
           (apply str 
@@ -505,12 +535,14 @@ If not matched, output marker instead, and don't consume a-string."
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn process-for-analysis [sentence]
+(defn process-for-analysis 
   "Take an action sentence and clean it up to be analyzed."
+  [sentence]
   )
 
-(defn count-words [string]
+(defn count-words 
   "given a string, count the number of occurances of each word."
+  [string]
   )
 
 
@@ -623,7 +655,7 @@ If not matched, output marker instead, and don't consume a-string."
                                   ;{:pre [(string? x)]}
                                   (if (string? x)
                                     (-> x tokenize pos-tag)
-                                    (print "name error:" x)
+                                    ;(print "name error:" x)
                                     )) 
                                 
                   source-text)]
@@ -684,8 +716,9 @@ If not matched, output marker instead, and don't consume a-string."
                 false)]
       y)))
 
-(defn annotate-names [source-text]
+(defn annotate-names 
   "Take a sentence and return the same sentence with likely names tagged."
+  [source-text]
   (loop [text source-text
          output []]
     (if (empty? text)
@@ -857,8 +890,9 @@ If not matched, output marker instead, and don't consume a-string."
     true
     ))
   
-(defn gen-output-action [action names]
+(defn gen-output-action 
   "Take a chunked sentence, and walk through it, outputting as an action..."
+  [action names]
   (loop [act action
          last-char nil
          name-list (shuffle names) 
@@ -999,8 +1033,9 @@ If not matched, output marker instead, and don't consume a-string."
       :unknown
       (:gender (first matches)))))
 
-(defn guess-gender [word]
+(defn guess-gender 
   "Takes a noun or pronoun and tries to guess the grammatical gender."
+  [word]
   (cond 
     (re-matches #"(I|me|my|mine|myself)" word) :first-person
     (re-matches #"(You|Your|Yourself|you|your|your|yourself)" word) :second-person
@@ -1027,8 +1062,9 @@ If not matched, output marker instead, and don't consume a-string."
         g2
         g1))))
 
-(defn token-is-name? [token]
-  :doc "Takes a POS-tagged token and returns true is the token is probably a name."
+(defn token-is-name? 
+  {:doc "Takes a POS-tagged token and returns true is the token is probably a name."}
+  [token]
   (cond
     (re-matches #"(NNP)" (:tag token)) true
     ;(re-matches #"(PRP|PRP\$)" (:tag token)) true
@@ -1057,8 +1093,9 @@ If not matched, output marker instead, and don't consume a-string."
                 tokenized-sentence)]
     (remove nil? combined)))
 
-(defn mark-names [tokenized-sentence]
+(defn mark-names 
   "Take a pos-tagged, tokenized sentence, and return it with the names replaced with functions."
+  [tokenized-sentence]
   (combine-name-vectors
       (map #(if (token-is-name? %) % (:word %)) ;filter out names
            (map #(hash-map :word (first %)
@@ -1074,8 +1111,9 @@ If not matched, output marker instead, and don't consume a-string."
     :else (:word word)))
 
 
-(defn number-characters [sentence]
+(defn number-characters 
   "Take a processed sentence and mark which character is associated with each noun and pronoun."
+  [sentence]
   (loop [input sentence
          output []
          char-count 0
@@ -1214,8 +1252,9 @@ If not matched, output marker instead, and don't consume a-string."
                      (take (+ 1 (rand-int 7)) (shuffle actions))))
          "\r\n\r\n"))
 
-(defn make-scene [action-list character-list] 
+(defn make-scene  
   "Output a number of paragraphs, based on the actions and characters provided."
+  [action-list character-list]
   (time
   (apply str
          (let [chars (shuffle character-list)
@@ -1226,7 +1265,7 @@ If not matched, output marker instead, and don't consume a-string."
   (time
   (apply str
   (let [acts (shuffle (take (int (/ (count action-list) 4)) action-list))
-        body-text (pmap (fn [_] (make-scene acts character-list)) (range (+ 3 (rand-int 7))))  
+        body-text (map (fn [_] (make-scene acts character-list)) (range (+ 3 (rand-int 7))))  
         ;(take (+ 3 (rand-int 7))
                   ;      (repeatedly #(make-scene acts character-list)))
         chapter-name (longest-word body-text)
@@ -1250,33 +1289,36 @@ If not matched, output marker instead, and don't consume a-string."
   (let [raw-text raw-source-text;(slurp "texts\\cleaned\\pnp_excerpt.txt")
         paragraphs (time (get-data raw-text))
         source-text (flatten (vals (mapcat :categorized paragraphs)))       
-        character-name-list (time (print-debug "Characters" (remove #(= (clojure.string/upper-case (:word %)) (:word %) ) (remove nil? (map #(hash-map :word % :gender (guess-gender %)) 
-                                                                                                                                 (distinct (concat 
-                                                                                                                                             (catalog-names-1 source-text) 
-                                                                                                                                             (catalog-names-2 source-text))))))))
+        character-name-list (time 
+                              (print-debug "Characters" 
+                                           (remove #(= (clojure.string/upper-case (:word %)) (:word %) ) 
+                                                   (remove nil? (map #(hash-map :word % :gender (guess-gender %)) 
+                                                                     (distinct (concat 
+                                                                                 (catalog-names-1 source-text) 
+                                                                                 (catalog-names-2 source-text))))))))
         ;print-names (pprint character-name-list)
         action-sentences (time (print-debug "Actions" (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))))
-        actions-list
-        (time  
-              (pmap (fn [sen]
-                      {:pre [(string? sen)]}
-                      (let [;tokenized (tokenize sen)
-                            ;parsed (parser [(clojure.string/join " " tokenized)])
-                            ;pos-tagged (pos-tag tokenized)
-                            ;chunked (chunker pos-tagged)
-                            ;processed (number-characters (into [] (mark-names pos-tagged)))
-                            ]
-                        (print ".")
-                        ;(hash-map
-                          ;:text %
-                          ;:tokenized tokenized
-                          ;:parsed parsed
-                          ;:pos pos-tagged
-                          ;:chunked chunked
-                          ;pos-tagged;processed
-                          sen
-                          ))
-                   action-sentences))
+        actions-list (map (fn [sen] {:pre [(string? sen)]} sen) action-sentences)
+        ;(time  
+        ;      (pmap (fn [sen] 
+        ;              {:pre [(string? sen)]}
+        ;              (let [;tokenized (tokenize sen)
+        ;                    ;parsed (parser [(clojure.string/join " " tokenized)])
+        ;                    ;pos-tagged (pos-tag tokenized)
+        ;                    ;chunked (chunker pos-tagged)
+        ;                    ;processed (number-characters (into [] (mark-names pos-tagged)))
+        ;                    ]
+        ;                (print ".")
+        ;                ;(hash-map
+        ;                  ;:text %
+        ;                  ;:tokenized tokenized
+        ;                  ;:parsed parsed
+        ;                  ;:pos pos-tagged
+        ;                  ;:chunked chunked
+        ;                  ;pos-tagged;processed
+        ;                  sen
+        ;                 ))
+        ;           action-sentences))
         body-text (write-book actions-list (take (int (/ (count character-name-list) 8)) (shuffle character-name-list)))
         book-title (str (longest-word body-text)); (random-character character-name-list) (random-word body-text))
                ]
@@ -1333,7 +1375,7 @@ If not matched, output marker instead, and don't consume a-string."
           (apply str (make-book (input-source-text)))))
   (print "\nDone\n"))
 
-(make-novel)
+;(make-novel)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1398,12 +1440,14 @@ If not matched, output marker instead, and don't consume a-string."
 
 
 
-(defn create-action [sentence]
+(defn create-action 
   "Takes an action sentence and converts it to a valid action-sentence-function that can be called by the characters."
+  [sentence]
   )
 
-(defn display-action [action]
+(defn display-action 
   "Takes a formatted action-sentence-function and runs it, returning a string that can be printed."
+  [action]
   )
 
 (defn find-in-phrase [phrase regex]
