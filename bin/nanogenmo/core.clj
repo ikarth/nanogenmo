@@ -545,7 +545,10 @@ If not matched, output marker instead, and don't consume a-string."
   [string]
   )
 
-
+(defn top-few-names
+  "Grab the nth top items in each category."
+  [list nth]
+  (map #(take nth %) (group-by :gender list)))
 
 
 
@@ -1290,12 +1293,14 @@ If not matched, output marker instead, and don't consume a-string."
         paragraphs (time (get-data raw-text))
         source-text (flatten (vals (mapcat :categorized paragraphs)))       
         character-name-list (time 
-                              (print-debug "Characters" 
-                                           (remove #(= (clojure.string/upper-case (:word %)) (:word %) ) 
-                                                   (remove nil? (map #(hash-map :word % :gender (guess-gender %)) 
+                              (print-debug "Characters"
+                                           (top-few-names (shuffle
+                                             (remove #(= (clojure.string/upper-case (:word %)) (:word %) ) 
+                                                     (remove nil? (map #(hash-map :word % :gender (guess-gender %)) 
                                                                      (distinct (concat 
                                                                                  (catalog-names-1 source-text) 
-                                                                                 (catalog-names-2 source-text))))))))
+                                                                                 (catalog-names-2 source-text)))))))
+                                             10)))
         ;print-names (pprint character-name-list)
         action-sentences (time (print-debug "Actions" (filter #(not (nil? %)) (flatten (map #(:action (:categorized %)) paragraphs)))))
         actions-list (map (fn [sen] {:pre [(string? sen)]} sen) action-sentences)
